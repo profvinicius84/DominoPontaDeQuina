@@ -5,8 +5,12 @@ using Microsoft.EntityFrameworkCore;
 namespace DominoPontaDeQuina.Infrastructure.Persistence.Repositories;
 
 /// <summary>Implementa a consulta de ranking com o <see cref="DominoDbContext"/>.</summary>
-public sealed class RankingRepository(DominoDbContext db) : IRankingRepository
+public sealed class RankingRepository : EfRepository<Ranking>, IRankingRepository
 {
+    readonly DominoDbContext db;
+
+    /// <summary>Inicializa o repositório de ranking.</summary>
+    public RankingRepository(DominoDbContext db) : base(db) => this.db = db;
     /// <inheritdoc />
     public async Task<IReadOnlyList<Ranking>> ObterAsync(CancellationToken cancellationToken = default)
     {

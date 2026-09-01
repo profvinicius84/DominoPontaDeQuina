@@ -33,12 +33,12 @@ public sealed class PartidaService(
         ValidarNome(nome);
         await ObterPartidaOuFalharAsync(partidaId, cancellationToken);
 
-        var jogador = await jogadores.AdicionarAsync(new Jogador
+        var jogador = await jogadores.AdicionarComUsuarioAsync(new Jogador
         {
             Id = Guid.NewGuid(),
             Nome = nome
         }, usuarioId, cancellationToken);
-        await participacoes.AdicionarAsync(new ParticipacaoPartida { Pontos = 0 }, partidaId, jogador.Id, cancellationToken);
+        await participacoes.AdicionarNaPartidaAsync(new ParticipacaoPartida { Pontos = 0 }, partidaId, jogador.Id, cancellationToken);
         return jogador;
     }
 
@@ -51,7 +51,7 @@ public sealed class PartidaService(
         if (!await jogadores.ExisteAsync(jogadorId, cancellationToken))
             throw new KeyNotFoundException("Jogador não encontrado.");
 
-        return await lances.AdicionarAsync(new Lance
+        return await lances.AdicionarNaPartidaAsync(new Lance
         {
             Id = Guid.NewGuid(),
             Timestamp = DateTime.UtcNow

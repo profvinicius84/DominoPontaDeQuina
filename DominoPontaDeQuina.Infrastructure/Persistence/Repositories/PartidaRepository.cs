@@ -5,17 +5,12 @@ using Microsoft.EntityFrameworkCore;
 namespace DominoPontaDeQuina.Infrastructure.Persistence.Repositories;
 
 /// <summary>Implementa a persistência de partidas com o <see cref="DominoDbContext"/>.</summary>
-public sealed class PartidaRepository(DominoDbContext db) : IPartidaRepository
+public sealed class PartidaRepository : EfRepository<Partida>, IPartidaRepository
 {
-    /// <inheritdoc />
-    public async Task<Partida> AdicionarAsync(Partida partida, CancellationToken cancellationToken = default)
-    {
-        db.Partidas.Add(partida);
-        await db.SaveChangesAsync(cancellationToken);
-        return partida;
-    }
+    readonly DominoDbContext db;
 
-    /// <inheritdoc />
+    /// <summary>Inicializa o repositório de partidas.</summary>
+    public PartidaRepository(DominoDbContext db) : base(db) => this.db = db;
     public async Task<Partida?> ObterAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await db.Partidas.AsNoTracking().SingleOrDefaultAsync(partida => partida.Id == id, cancellationToken);
