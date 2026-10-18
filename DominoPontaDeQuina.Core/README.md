@@ -27,36 +27,31 @@ Cada rodada funciona como um set:
 - termina quando um jogador bate
 - ou termina quando o tabuleiro trava
 
-O jogo pode ser disputado:
-- por times com 1 jogador
-- por times com 2 jogadores
-
-Não existe enum de modo de jogo. O formato da partida deve ser determinado pela composição dos times cadastrados.
+O jogo é um embate entre dois jogadores, sem times. Cada jogador inicia a rodada com sete peças; as peças restantes formam a cava.
 
 ### Regras esperadas da partida
 
-- Registrar os times e os jogadores.
+- Registrar os dois jogadores.
 - Iniciar a primeira rodada.
-- Iniciar novas rodadas enquanto nenhum time atingir a pontuação alvo.
-- Encerrar a partida quando um time atingir ou ultrapassar a pontuação alvo.
+- Iniciar novas rodadas enquanto nenhum jogador atingir a pontuação alvo.
+- Encerrar a partida quando um jogador atingir ou ultrapassar a pontuação alvo.
 
 ### Regras esperadas da rodada
 
-- Distribuir peças aos jogadores.
-- Na primeira rodada, iniciar com quem possuir a sena `[6|6]`.
-- Nas rodadas seguintes, iniciar com quem venceu a rodada anterior.
+- Distribuir sete peças para cada jogador e manter as restantes na cava.
+- Em cada rodada, iniciar com quem possuir a maior dupla entre as mãos dos jogadores; sem dupla, iniciar com quem possuir a pedra de maior valor, comparada pela maior face e depois pela outra face, em ordem decrescente.
 - Executar as jogadas em sentido horário.
-- Finalizar a rodada quando um jogador bater ou quando o tabuleiro travar.
-- Em caso de travamento, definir o vencedor pela menor soma dos valores das peças restantes na mão.
+- Finalizar a rodada quando um jogador ficar com a mão vazia ou quando o tabuleiro travar.
+- Em caso de travamento, os valores das peças restantes na mão de um jogador contam para o outro quando sua soma for múltipla de 5. A rodada seguinte reinicia pelo critério da maior dupla.
 
 ### Regras esperadas da jogada
 
 - O jogador escolhe uma peça e um lado do tabuleiro.
 - A peça só pode ser colada se for compatível com a ponta escolhida.
 - Depois da jogada, deve ser verificada a soma das pontas externas do tabuleiro.
-- Quando a soma das pontas externas for múltiplo de 5, o time do jogador pontua.
+- Quando a soma das pontas externas for múltiplo de 5, o jogador que realizou a jogada pontua.
 - A pontuação da jogada deve ser calculada por `somaDasPontas / 5`.
-- Se o jogador não tiver peça compatível, ele deve passar a vez.
+- Se o jogador não tiver peça compatível, deve comprar uma peça da cava, quando ela existir; se ainda não puder jogar, passa a vez.
 
 ## O que deve ser implementado pelos alunos
 
@@ -68,7 +63,7 @@ Os principais gaps deixados no core e que devem ser implementados são:
 - posicionamento de peças no tabuleiro
 - controle de turno
 - regra de pontuação
-- verificação de batida
+- verificação de mão vazia
 - verificação de tabuleiro travado
 - definição do vencedor da rodada
 - finalização da partida

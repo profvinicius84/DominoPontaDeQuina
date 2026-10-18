@@ -1,0 +1,19 @@
+@namespace DominoPontaDeQuina.Blazor
+@using Microsoft.AspNetCore.Components.Routing
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base href="/" />
+    <title>Dominó · Acompanhamento</title>
+    <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+    <Router AppAssembly="typeof(App).Assembly" @rendermode="new Microsoft.AspNetCore.Components.Web.InteractiveServerRenderMode(prerender: false)">
+        <Found Context="routeData"><RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" /></Found>
+        <NotFound><p>Página não encontrada.</p></NotFound>
+    </Router>
+    <script src="_framework/blazor.web.js"></script>
+</body>
+</html>

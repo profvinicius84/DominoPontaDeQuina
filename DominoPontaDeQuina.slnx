@@ -7,5 +7,9 @@
   <Project Path="DominoPontaDeQuina.Application/DominoPontaDeQuina.Application.csproj" />
   <Project Path="DominoPontaDeQuina.Infrastructure/DominoPontaDeQuina.Infrastructure.csproj" />
   <Project Path="DominoPontaDeQuina.Migrations/DominoPontaDeQuina.Migrations.csproj" />
+  <Project Path="DominoPontaDeQuina.Api/DominoPontaDeQuina.Api.csproj" />
+  <Project Path="DominoPontaDeQuina.Blazor/DominoPontaDeQuina.Blazor.csproj" />
+  <Project Path="DominoPontaDeQuina.Client/DominoPontaDeQuina.Client.csproj" />
   <Project Path="DominoPontaDeQuina.Tests/DominoPontaDeQuina.Tests.csproj" />
+  <Project Path="DominoPontaDeQuina.WebhookRelay/DominoPontaDeQuina.WebhookRelay.csproj" />
 </Solution>

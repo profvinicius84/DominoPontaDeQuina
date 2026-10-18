@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="DominoPontaDeQuina.Client/DominoPontaDeQuina.Client.csproj" />
+  <Project Path="DominoPontaDeQuina.Maui/DominoPontaDeQuina.Maui.csproj" />
+</Solution>

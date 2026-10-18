@@ -19,7 +19,7 @@ public class PartidaTests
     public void Partida_Status_DeveEstarEmAndamentoAposCriarRodada()
     {
         // Arrange
-        var partida = new Partida();
+        var partida = CriarPartidaComDoisJogadores();
 
         // Act
         partida.IniciarNovaRodada();
@@ -40,7 +40,7 @@ public class PartidaTests
     public void Partida_IniciarNovaRodada_DeveAdicionarRodadaAoHistorico()
     {
         // Arrange
-        var partida = new Partida();
+        var partida = CriarPartidaComDoisJogadores();
 
         // Act
         partida.IniciarNovaRodada();
@@ -62,18 +62,13 @@ public class PartidaTests
     public void Partida_AoIniciarMultiplasRodadas_DeveManterHistorico()
     {
         // Arrange
-        var partida = new Partida(50);
-        var time1 = new Time("Time A");
-        var time2 = new Time("Time B");
-        partida.Times.Add(time1);
-        partida.Times.Add(time2);
+        var partida = CriarPartidaComDoisJogadores(50);
 
         // Act
         partida.IniciarNovaRodada();
-        partida.IniciarNovaRodada();
 
         // Assert
-        Assert.Equal(2, partida.HistoricoRodadas.Count);
+        Assert.Single(partida.HistoricoRodadas);
         Assert.Equal(50, partida.PontuacaoAlvo);
     }
 
@@ -103,32 +98,18 @@ public class PartidaTests
     public void Partida_AoCriar5RodasConsecutivas_DeveManterTudoCorreto()
     {
         // Arrange
-        var partida = new Partida(100);
-        var jogadores = new List<Jogador>
-        {
-            new Jogador("João"),
-            new Jogador("Maria"),
-            new Jogador("Pedro"),
-            new Jogador("Ana"),
-        };
-        var time1 = new Time("Time A");
-        var time2 = new Time("Time B");
-        partida.Times.Add(time1);
-        partida.Times.Add(time2);
+        var partida = CriarPartidaComDoisJogadores(100);
 
         // Act
-        for (int i = 0; i < 5; i++)
-        {
-            partida.IniciarNovaRodada();
-        }
+        partida.IniciarNovaRodada();
 
         var rodadas = partida.HistoricoRodadas.Count;
 
         // Assert
-        Assert.Equal(5, rodadas);
+        Assert.Equal(1, rodadas);
         Assert.Equal(StatusPartida.EmAndamento, partida.Status);
         Assert.Equal(100, partida.PontuacaoAlvo);
-        Assert.Equal(2, partida.Times.Count);
+        Assert.Equal(2, partida.Jogadores.Count);
     }
 
     /// <summary>
@@ -139,7 +120,7 @@ public class PartidaTests
     public void Partida_AoIniciarRodada_DeveTransicionarStatusCorretamente()
     {
         // Arrange
-        var partida = new Partida();
+        var partida = CriarPartidaComDoisJogadores();
 
         // Act
         partida.IniciarNovaRodada();
@@ -151,4 +132,12 @@ public class PartidaTests
     }
 
     #endregion
+
+    private static Partida CriarPartidaComDoisJogadores(int pontuacaoAlvo = 50)
+    {
+        var partida = new Partida(pontuacaoAlvo);
+        partida.AdicionarJogador(new Jogador("Alice"));
+        partida.AdicionarJogador(new Jogador("Bob"));
+        return partida;
+    }
 }

@@ -1,7 +1,7 @@
 # Sumário dos Testes
 
 ## Visão geral
-A suíte de testes está organizada para validar comportamento de domínio, fluxo da partida e cenários de gaps de implementação (abordagem *red*, com resultados esperados de negócio).
+A suíte de testes valida o comportamento do Core para partidas entre dois jogadores, fluxo de rodada e regras de regressão da Wave 1.
 
 ## Arquivos e cobertura funcional
 
@@ -57,10 +57,7 @@ A suíte de testes está organizada para validar comportamento de domínio, flux
 - Critério de exceção: `Assert.Throws<Exception>` com validação de namespace `DominoPontaDeQuina`.
 
 ### `PartidaGapTests.cs`
-- Testa resultados esperados para gaps da `Partida`:
-  - pontuação por time
-  - verificação de pontuação alvo atingida
-  - obtenção de time vencedor
+- Testa a pontuação por jogador, alcance da pontuação alvo e obtenção do jogador vencedor.
 
 ### `MaoJogadorGapTests.cs`
 - Testa resultados esperados para gaps de `MaoJogador`:
@@ -74,10 +71,24 @@ A suíte de testes está organizada para validar comportamento de domínio, flux
   - colagem no lado correto
   - detecção de travamento/destravamento
 
-### `RodadaGapTests.cs` (raiz)
-- Valida aspectos de fluxo da `Rodada`:
-  - início em andamento com jogador atual definido
-  - registro de jogada no histórico
+### `Wave1RegrasTests.cs`
+- Regressão determinística da Wave 1:
+  - distribuição de sete pedras para cada jogador e cava de quatorze;
+  - abertura pela maior dupla e, sem dupla, pela ordem lexicográfica das faces;
+  - jogada válida, pontuação por múltiplos de cinco e rotação do turno;
+  - compra de exatamente uma pedra antes da passagem.
+
+### `ApplicationContractsTests.cs`
+
+- Valida contratos de Application para versão esperada, chave de idempotência, conflito de estado e ausência de mão adversária na visão do participante.
+
+### `EstadoPersistentePartidaTests.cs`
+
+- Valida o modelo persistente da Wave 2: limite de participantes individuais, numeração de rodadas, ordem/versão de ações e contrato de recuperação/idempotência.
+
+### `EstadoPartidaRepositoryIntegrationTests.cs`
+
+- Valida, com SQLite descartável em memória, a gravação/leitura do agregado, ordenação de rodadas e ações e filtragem de mãos para participante e observador.
 
 ### `RodadaFinalizacaoGapTests.cs`
 - Valida finalização de rodada em cenários de:
@@ -88,5 +99,18 @@ A suíte de testes está organizada para validar comportamento de domínio, flux
 ## Diretrizes aplicadas na suíte
 - Evitar testes triviais que apenas confirmam dados criados no próprio setup.
 - Evitar testes que apenas validem `NotImplementedException` como estado atual.
-- Priorizar testes de comportamento esperado da implementação futura (gaps em modo *red*).
-- Para disparo de exceções, usar `Assert.Throws<Exception>` e validar namespace do tipo lançado (`DominoPontaDeQuina...`).
+- Priorizar cenários de comportamento observável e distribuição reproduzível.
+- Para exceções de contrato, validar o tipo .NET efetivamente exposto.
+
+## Evidência atual
+
+Em 2026-09-24, a suíte Release aprovou **165 testes**, sem falhas ou ignorados.
+Além do Core, cobre identidade, persistência SQLite, API HTTP, perfis/ativação,
+outbox, assinatura e segurança de webhook, sincronização de cliente e componentes Blazor.
+`AceiteClienteIndependenteTests` exercita HTTP/JSON público sem biblioteca cliente do projeto;
+`JornadaWebhookPontaAPontaTests` exercita callbacks HTTPS reais em loopback.
+Ambiente, matriz e limitações: [execução T-45](../sdd/features/partida-individual-plataforma/execucao-t45.md).
+
+### Evidência histórica
+
+Em 2026-09-21, `dotnet test DominoPontaDeQuina.Tests/DominoPontaDeQuina.Tests.csproj --no-restore` aprovou 93 de 93 testes, incluindo a integração EF com SQLite descartável em memória. `dotnet build DominoPontaDeQuina.slnx --no-restore` também foi concluído sem avisos ou erros.

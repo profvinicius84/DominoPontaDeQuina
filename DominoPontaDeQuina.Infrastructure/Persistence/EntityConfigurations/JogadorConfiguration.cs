@@ -13,7 +13,8 @@ public sealed class JogadorConfiguration : IEntityTypeConfiguration<Jogador>
         builder.ToTable("Jogadores");
         builder.HasKey(jogador => jogador.Id);
         builder.Property(jogador => jogador.Nome).HasMaxLength(150).IsRequired();
+        builder.Property(jogador => jogador.AtivacaoHash).HasMaxLength(64);
         builder.HasOne(jogador => jogador.Usuario).WithMany(usuario => usuario.Jogadores)
-            .HasForeignKey("UsuarioId").OnDelete(DeleteBehavior.SetNull);
+            .HasForeignKey(jogador => jogador.UsuarioId).OnDelete(DeleteBehavior.SetNull);
     }
 }

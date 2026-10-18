@@ -13,10 +13,23 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.19" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.8" />
+    <PackageReference Include="bunit" Version="1.40.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DominoPontaDeQuina.Core\DominoPontaDeQuina.Core.csproj" />
+    <ProjectReference Include="..\DominoPontaDeQuina.Domain\DominoPontaDeQuina.Domain.csproj" />
+    <ProjectReference Include="..\DominoPontaDeQuina.Application\DominoPontaDeQuina.Application.csproj" />
+    <ProjectReference Include="..\DominoPontaDeQuina.Infrastructure\DominoPontaDeQuina.Infrastructure.csproj" />
+    <ProjectReference Include="..\DominoPontaDeQuina.Api\DominoPontaDeQuina.Api.csproj" />
+    <ProjectReference Include="..\DominoPontaDeQuina.Client\DominoPontaDeQuina.Client.csproj" />
+    <ProjectReference Include="..\DominoPontaDeQuina.Blazor\DominoPontaDeQuina.Blazor.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\DominoPontaDeQuina.Migrations\Sqlite\TokensReutilizaveis.sql" Link="Sqlite\TokensReutilizaveis.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\DominoPontaDeQuina.Migrations\Sqlite\PerfisJogadorAtivacaoWebhook.sql" Link="Sqlite\PerfisJogadorAtivacaoWebhook.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

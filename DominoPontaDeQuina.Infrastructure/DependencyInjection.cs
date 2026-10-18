@@ -3,6 +3,8 @@ using DominoPontaDeQuina.Infrastructure.Persistence;
 using DominoPontaDeQuina.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DominoPontaDeQuina.Application.Identidade.Contracts;
+using DominoPontaDeQuina.Infrastructure.Identity;
 
 namespace DominoPontaDeQuina.Infrastructure;
 
@@ -19,7 +21,12 @@ public static class DependencyInjection
     {
         services.AddDbContext<DominoDbContext>(configureDb);
         services.AddScoped<IPartidaRepository, PartidaRepository>();
+        services.AddScoped<IEstadoPartidaRepository, EstadoPartidaRepository>();
+        services.AddScoped<IIdentidadeRepository, IdentidadeRepository>();
+        services.AddScoped<IEntregaTokenEmail, EntregaTokenEmailNaoConfigurada>();
         services.AddScoped<IJogadorRepository, JogadorRepository>();
+        services.AddScoped<IPerfilJogadorRepository, PerfilJogadorRepository>();
+        services.AddScoped<IEventoWebhookRepository, EventoWebhookRepository>();
         services.AddScoped<IParticipacaoRepository, ParticipacaoRepository>();
         services.AddScoped<ILanceRepository, LanceRepository>();
         services.AddScoped<IRankingRepository, RankingRepository>();

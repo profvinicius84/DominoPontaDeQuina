@@ -11,13 +11,17 @@ public sealed class ParticipacaoPartidaConfiguration : IEntityTypeConfiguration<
     public void Configure(EntityTypeBuilder<ParticipacaoPartida> builder)
     {
         builder.ToTable("ParticipacoesPartida");
-        builder.Property<Guid>("PartidaId");
-        builder.Property<Guid>("JogadorId");
-        builder.HasKey("PartidaId", "JogadorId");
+        builder.HasKey(participacao => new { participacao.PartidaId, participacao.JogadorId });
+        builder.Property(participacao => participacao.Id).IsRequired();
+        builder.Property(participacao => participacao.Posicao).IsRequired();
+        builder.Property(participacao => participacao.WebhookUrl).HasMaxLength(2048);
         builder.Property(participacao => participacao.Pontos).IsRequired();
+        builder.Property(participacao => participacao.QuantidadePedrasNaMao).IsRequired();
         builder.HasOne(participacao => participacao.Partida).WithMany(partida => partida.Participacoes)
-            .HasForeignKey("PartidaId").OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(participacao => participacao.PartidaId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(participacao => participacao.Jogador).WithMany(jogador => jogador.Participacoes)
-            .HasForeignKey("JogadorId").OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(participacao => participacao.JogadorId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(participacao => new { participacao.PartidaId, participacao.Posicao }).IsUnique();
+        builder.HasIndex(participacao => participacao.Id).IsUnique();
     }
 }

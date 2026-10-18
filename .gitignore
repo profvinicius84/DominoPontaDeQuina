@@ -17,6 +17,9 @@
 mono_crash.*
 
 # Build results
+DominoPontaDeQuina.Api/appsettings.json
+DominoPontaDeQuina.Api/.data-protection/
+.codex-build/
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/

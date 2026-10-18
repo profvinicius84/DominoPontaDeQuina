@@ -15,5 +15,8 @@ public sealed class PartidaConfiguration : IEntityTypeConfiguration<Partida>
         builder.Property(partida => partida.PontuacaoAlvo).IsRequired();
         builder.Property(partida => partida.Status).HasMaxLength(40).IsRequired();
         builder.Property(partida => partida.CriadaEm).IsRequired();
+        builder.Property(partida => partida.VersaoEstado).IsRequired().IsConcurrencyToken();
+        builder.Property(partida => partida.EncerradaEmUtc);
+        builder.HasIndex(partida => new { partida.Id, partida.VersaoEstado });
     }
 }

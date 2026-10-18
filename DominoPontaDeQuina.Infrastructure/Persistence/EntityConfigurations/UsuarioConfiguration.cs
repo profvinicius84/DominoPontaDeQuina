@@ -16,5 +16,7 @@ public sealed class UsuarioConfiguration : IEntityTypeConfiguration<Usuario>
         builder.HasIndex(usuario => usuario.Email).IsUnique();
         builder.Property(usuario => usuario.SenhaHash).HasMaxLength(500).IsRequired();
         builder.Property(usuario => usuario.CriadoEm).IsRequired();
+        builder.HasMany(usuario => usuario.TokensAcesso).WithOne(token => token.Usuario)
+            .HasForeignKey(token => token.UsuarioId).OnDelete(DeleteBehavior.Cascade);
     }
 }

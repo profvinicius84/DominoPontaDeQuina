@@ -1,0 +1,124 @@
+@page "/"
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using DominoPontaDeQuina.Client
+@implements IAsyncDisposable
+@inject DominoApiClient Api
+
+<header><span class="eyebrow">DOMINÓ PONTA DE QUINA</span><h1>Acompanhar uma partida</h1>
+<p>Pedras na mesa, placar e contagem de mãos. Atualização a cada 5 segundos.</p></header>
+<section class="card" aria-label="Acesso">
+    <label for="token">Token recebido por e-mail</label>
+    <input id="token" type="password" autocomplete="off" @bind="token" disabled="@acompanhando" />
+    <label for="partida">Identificador da partida</label>
+    <input id="partida" @bind="partidaTexto" placeholder="Cole o identificador compartilhado pelo jogador" disabled="@acompanhando" />
+    <div class="actions">
+        <button @onclick="ConectarAsync" disabled="@(ocupado || acompanhando)">Acompanhar</button>
+        <button @onclick="AtualizarAsync" disabled="@(!acompanhando || ocupado)">Atualizar agora</button>
+        <button class="secondary" @onclick="Sair" disabled="@(!acompanhando)">Sair</button>
+    </div>
+</section>
+<p role="status" aria-live="polite" class="@(desatualizado ? "warning" : "status")">@mensagem</p>
+@if (estado is not null)
+{
+    <section class="card" aria-label="Estado público da partida">
+        <div class="heading"><h2>@Situacao(estado.Situacao) · Rodada @estado.NumeroRodada</h2><span>Versão @estado.VersaoEstado</span></div>
+        @if (atualizadoEm is not null) { <p>Última consulta: @atualizadoEm.Value.ToString("HH:mm:ss")</p> }
+        <div class="players">
+            @foreach (var jogador in estado.Participantes)
+            {
+                <article><h3>@jogador.Nome</h3><p>@jogador.Pontuacao pontos · @jogador.QuantidadePedrasNaMao pedras</p>
+                    @if (jogador.EhVez && estado.Situacao == SituacaoPartida.EmAndamento) { <span class="badge">Vez de jogar</span> }
+                    @if (estado.VencedorId == jogador.JogadorId) { <span class="badge">Vencedor</span> }
+                </article>
+            }
+        </div>
+        <h3>Mesa</h3>
+        @if (estado.Tabuleiro.Count == 0) { <p>Nenhuma pedra jogada nesta rodada.</p> }
+        <div class="board" aria-label="Pedras jogadas">
+            @foreach (var pedra in estado.Tabuleiro)
+            { <span class="tile" aria-label="@($"Pedra {pedra.ValorA} e {pedra.ValorB}")"><span>@pedra.ValorA</span><span>@pedra.ValorB</span></span> }
+        </div>
+    </section>
+}
+
+@code {
+    private string token = "", partidaTexto = "", mensagem = "Nenhuma partida selecionada. Informe seu token e o identificador da partida.";
+    private Guid partidaId;
+    private bool ocupado, acompanhando, desatualizado;
+    private ObservacaoPartida? estado;
+    private DateTime? atualizadoEm;
+    private readonly CancellationTokenSource encerramento = new();
+    private Task? atualizacoes;
+    private int geracao;
+
+    protected override void OnInitialized() => atualizacoes = AtualizarPeriodicamenteAsync();
+    private async Task ConectarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(token) || !Guid.TryParse(partidaTexto, out partidaId))
+        { mensagem = "Informe um token e um identificador de partida válido."; return; }
+        acompanhando = true;
+        await AtualizarAsync();
+    }
+    private async Task AtualizarAsync()
+    {
+        if (ocupado || !acompanhando) return;
+        ocupado = true;
+        var consulta = geracao;
+        mensagem = "Consultando partida…";
+        try
+        {
+            var recebido = await Api.ObservarAsync(token, partidaId, encerramento.Token);
+            if (consulta != geracao) return;
+            if (estado is null || recebido.VersaoEstado >= estado.VersaoEstado) estado = recebido;
+            atualizadoEm = DateTime.Now;
+            desatualizado = false;
+            mensagem = recebido.Situacao == SituacaoPartida.Encerrada ? "Partida encerrada." : "Partida atualizada.";
+        }
+        catch (ApiException erro)
+        {
+            if (consulta != geracao) return;
+            desatualizado = estado is not null;
+            mensagem = erro.Status switch
+            {
+                401 => "Token ausente, inválido ou revogado. Verifique o token informado.",
+                403 => "Você não tem permissão para observar esta partida.",
+                404 => "Partida não encontrada ou indisponível.",
+                _ => estado is null ? "Não foi possível carregar a partida. Tente novamente." : "Falha de atualização: os dados exibidos estão desatualizados."
+            };
+            if (erro.Status is 401 or 403 or 404)
+            { estado = null; acompanhando = false; token = ""; desatualizado = false; }
+        }
+        catch (OperationCanceledException) when (encerramento.IsCancellationRequested) { }
+        finally { ocupado = false; }
+    }
+    private async Task AtualizarPeriodicamenteAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(encerramento.Token))
+                await InvokeAsync(async () =>
+                {
+                    if (estado?.Situacao == SituacaoPartida.Encerrada) return;
+                    await AtualizarAsync();
+                    StateHasChanged();
+                });
+        }
+        catch (OperationCanceledException) when (encerramento.IsCancellationRequested) { }
+    }
+    private void Sair()
+    {
+        geracao++;
+        acompanhando = false; token = ""; estado = null; atualizadoEm = null; desatualizado = false;
+        mensagem = "Sessão do painel encerrada. Nenhuma partida selecionada.";
+    }
+    private static string Situacao(SituacaoPartida valor) => valor switch
+    { SituacaoPartida.EmAndamento => "Em andamento", SituacaoPartida.Encerrada => "Encerrada", _ => "Aguardando início" };
+    public async ValueTask DisposeAsync()
+    {
+        await encerramento.CancelAsync();
+        if (atualizacoes is not null) await atualizacoes;
+        encerramento.Dispose(); token = "";
+    }
+}

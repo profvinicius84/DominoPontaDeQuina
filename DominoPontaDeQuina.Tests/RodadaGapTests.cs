@@ -16,13 +16,7 @@ public class RodadaGapTests
     public void Iniciar_DeveColocarRodadaEmAndamentoEDefinirJogadorAtual()
     {
         var rodada = new Rodada();
-        var jogadores = new List<Jogador>
-        {
-            new("Alice"),
-            new("Bob"),
-            new("Carol"),
-            new("Dave")
-        }.AsReadOnly();
+        var jogadores = new List<Jogador> { new("Alice"), new("Bob") }.AsReadOnly();
 
         rodada.Iniciar(jogadores);
 
@@ -37,11 +31,11 @@ public class RodadaGapTests
     [Fact(DisplayName = "Deve marcar jogada como aplicada e adicionar ao histórico (Critério: StatusJogada = Aplicada e histórico atualizado).")]
     public void RegistrarJogada_DeveMarcarJogadaComoAplicadaEAdicionarAoHistorico()
     {
-        var rodada = new Rodada();
-        var jogada = new Jogada(new Jogador("Alice"));
-
-        // Mocka a rodada para status EmAndamento
-        ConfigurarStatus(rodada, StatusRodada.EmAndamento);
+        var jogadorA = new Jogador("Alice");
+        var jogadorB = new Jogador("Bob");
+        var rodada = new Rodada(CriarConjuntoComAbertura(jogadorA));
+        rodada.Iniciar(new[] { jogadorA, jogadorB }.ToList().AsReadOnly());
+        var jogada = rodada.ObterJogadaAtual();
 
         rodada.RegistrarJogada(jogada);
 
@@ -50,9 +44,15 @@ public class RodadaGapTests
         Assert.Same(jogada, rodada.HistoricoJogadas[0]);
     }
 
-    private static void ConfigurarStatus(Rodada rodada, StatusRodada status)
+    private static IEnumerable<Peca> CriarConjuntoComAbertura(Jogador jogadorA)
     {
-        var statusField = typeof(Rodada).GetField("<Status>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        statusField.SetValue(rodada, status);
+        var conjunto = Enumerable.Range(0, 7)
+            .SelectMany(valorA => Enumerable.Range(valorA, 7 - valorA)
+                .Select(valorB => new Peca(valorA, valorB)))
+            .ToList();
+        var abertura = new Peca(6, 6);
+        conjunto.Remove(abertura);
+        conjunto.Insert(0, abertura);
+        return conjunto;
     }
 }

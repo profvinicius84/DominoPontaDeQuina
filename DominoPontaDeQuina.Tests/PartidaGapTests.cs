@@ -6,45 +6,44 @@ namespace DominoPontaDeQuina.Core.Tests;
 public class PartidaGapTests
 {
     /// <summary>
-    /// <b>Objetivo:</b> Validar retorno da pontuação acumulada por time na partida.
-    /// <br/><b>Critério:</b> Dicionário deve conter todos os times com seus respectivos pontos.
+    /// <b>Objetivo:</b> Validar retorno da pontuação acumulada por jogador na partida.
     /// </summary>
-    [Fact(DisplayName = "Deve retornar pontuação dos times da partida (Critério: dicionário completo com valores corretos).")]
-    public void GetPontuacaoTimes_DeveRetornarPontuacaoDosTimesDaPartida()
+    [Fact(DisplayName = "Deve retornar pontuação dos jogadores da partida.")]
+    public void GetPontuacaoJogadores_DeveRetornarPontuacaoDosParticipantes()
     {
         var partida = new Partida();
-        var timeA = new Time("Time A");
-        var timeB = new Time("Time B");
+        var jogadorA = new Jogador("Alice");
+        var jogadorB = new Jogador("Bob");
 
-        timeA.SomarPontos(12);
-        timeB.SomarPontos(7);
+        jogadorA.SomarPontos(12);
+        jogadorB.SomarPontos(7);
 
-        partida.Times.Add(timeA);
-        partida.Times.Add(timeB);
+        partida.AdicionarJogador(jogadorA);
+        partida.AdicionarJogador(jogadorB);
 
-        var pontuacoes = partida.GetPontuacaoTimes();
+        var pontuacoes = partida.GetPontuacaoJogadores();
 
         Assert.Equal(2, pontuacoes.Count);
-        Assert.Equal(12, pontuacoes[timeA]);
-        Assert.Equal(7, pontuacoes[timeB]);
+        Assert.Equal(12, pontuacoes[jogadorA]);
+        Assert.Equal(7, pontuacoes[jogadorB]);
     }
 
     /// <summary>
-    /// <b>Objetivo:</b> Validar detecção de alcance da pontuação alvo por algum time.
+    /// <b>Objetivo:</b> Validar detecção de alcance da pontuação alvo por algum jogador.
     /// <br/><b>Critério:</b> Deve retornar true quando ao menos um time atingir o alvo.
     /// </summary>
-    [Fact(DisplayName = "Deve retornar true quando algum time atingir a pontuação alvo (Critério: VerificaPontuacaoAlvoAtingida = true).")]
-    public void VerificaPontuacaoAlvoAtingida_DeveRetornarTrue_QuandoAlgumTimeAtingirAlvo()
+    [Fact(DisplayName = "Deve retornar true quando algum jogador atingir a pontuação alvo.")]
+    public void VerificaPontuacaoAlvoAtingida_DeveRetornarTrue_QuandoAlgumJogadorAtingirAlvo()
     {
         var partida = new Partida(pontuacaoAlvo: 15);
-        var timeA = new Time("Time A");
-        var timeB = new Time("Time B");
+        var jogadorA = new Jogador("Alice");
+        var jogadorB = new Jogador("Bob");
 
-        timeA.SomarPontos(10);
-        timeB.SomarPontos(15);
+        jogadorA.SomarPontos(10);
+        jogadorB.SomarPontos(15);
 
-        partida.Times.Add(timeA);
-        partida.Times.Add(timeB);
+        partida.AdicionarJogador(jogadorA);
+        partida.AdicionarJogador(jogadorB);
 
         var pontuacaoAtingida = partida.VerificaPontuacaoAlvoAtingida();
 
@@ -52,24 +51,24 @@ public class PartidaGapTests
     }
 
     /// <summary>
-    /// <b>Objetivo:</b> Validar seleção do time vencedor com base na pontuação alvo.
+    /// <b>Objetivo:</b> Validar seleção do jogador vencedor com base na pontuação alvo.
     /// <br/><b>Critério:</b> Deve retornar o time que atingiu primeiro ou corretamente o alvo.
     /// </summary>
-    [Fact(DisplayName = "Deve retornar o time vencedor ao atingir pontuação alvo (Critério: time retornado corresponde ao vencedor esperado).")]
-    public void GetTimeVencedor_DeveRetornarTimeQueAtingiuPontuacaoAlvo()
+    [Fact(DisplayName = "Deve retornar o jogador vencedor ao atingir pontuação alvo.")]
+    public void GetJogadorVencedor_DeveRetornarJogadorQueAtingiuPontuacaoAlvo()
     {
         var partida = new Partida(pontuacaoAlvo: 20);
-        var timeA = new Time("Time A");
-        var timeB = new Time("Time B");
+        var jogadorA = new Jogador("Alice");
+        var jogadorB = new Jogador("Bob");
 
-        timeA.SomarPontos(20);
-        timeB.SomarPontos(18);
+        jogadorA.SomarPontos(20);
+        jogadorB.SomarPontos(18);
 
-        partida.Times.Add(timeA);
-        partida.Times.Add(timeB);
+        partida.AdicionarJogador(jogadorA);
+        partida.AdicionarJogador(jogadorB);
 
-        var vencedor = partida.GetTimeVencedor();
+        var vencedor = partida.GetJogadorVencedor();
 
-        Assert.Same(timeA, vencedor);
+        Assert.Same(jogadorA, vencedor);
     }
 }

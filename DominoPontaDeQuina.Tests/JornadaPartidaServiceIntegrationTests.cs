@@ -1,0 +1,132 @@
+using DominoPontaDeQuina.Application.Partidas;
+using DominoPontaDeQuina.Application.Partidas.Contracts;
+using DominoPontaDeQuina.Domain.Entities;
+using DominoPontaDeQuina.Infrastructure.Persistence;
+using DominoPontaDeQuina.Infrastructure.Persistence.Repositories;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+
+namespace DominoPontaDeQuina.Tests;
+
+/// <summary>Valida a orquestração transacional entre Application, Core e EF.</summary>
+public sealed class JornadaPartidaServiceIntegrationTests : IAsyncLifetime
+{
+    private readonly SqliteConnection connection = new("Data Source=:memory:");
+    private readonly Guid jogadorAId = Guid.NewGuid();
+    private readonly Guid jogadorBId = Guid.NewGuid();
+
+    public async Task InitializeAsync()
+    {
+        await connection.OpenAsync();
+        await using var db = CriarContexto();
+        await db.Database.EnsureCreatedAsync();
+        db.Jogadores.AddRange(new Jogador { Id = jogadorAId, Nome = "Alice" }, new Jogador { Id = jogadorBId, Nome = "Bob" });
+        await db.SaveChangesAsync();
+    }
+
+    public Task DisposeAsync() => connection.DisposeAsync().AsTask();
+
+    [Fact(DisplayName = "Jornada autoriza participantes, executa jogada no Core e recupera estado privado")]
+    public async Task Jornada_ExecutaJogadaEProtegeMaoAdversaria()
+    {
+        Guid partidaId;
+        await using (var db = CriarContexto())
+        {
+            var servico = CriarServico(db);
+            var criada = await servico.CriarAsync(new CriarPartidaComando(jogadorAId, 50));
+            Assert.True(criada.Sucesso);
+            partidaId = criada.Valor!.PartidaId;
+
+            var ingresso = await servico.IngressarAsync(new IngressarPartidaComando(partidaId, jogadorBId, 0, Guid.NewGuid()));
+            Assert.True(ingresso.Sucesso);
+            var inicio = await servico.IniciarAsync(new IniciarPartidaComando(partidaId, jogadorAId, 1, Guid.NewGuid()));
+            Assert.True(inicio.Sucesso);
+        }
+
+        EstadoPartidaParticipante estadoDoTurno;
+        await using (var db = CriarContexto())
+        {
+            var servico = CriarServico(db);
+            var estadoA = await servico.ConsultarEstadoProprioAsync(new ConsultarEstadoProprioConsulta(partidaId, jogadorAId));
+            var estadoB = await servico.ConsultarEstadoProprioAsync(new ConsultarEstadoProprioConsulta(partidaId, jogadorBId));
+            Assert.True(estadoA.Sucesso);
+            Assert.True(estadoB.Sucesso);
+            Assert.Equal(7, estadoA.Valor!.MinhaMao.Count);
+            Assert.Equal(7, estadoB.Valor!.MinhaMao.Count);
+            Assert.All(estadoA.Valor.Participantes, participante => Assert.Equal(7, participante.QuantidadePedrasNaMao));
+            estadoDoTurno = estadoA.Valor.JogadorDoTurnoId == jogadorAId ? estadoA.Valor : estadoB.Valor;
+            var estadoEmEspera = estadoA.Valor.JogadorDoTurnoId == jogadorAId ? estadoB.Valor : estadoA.Valor;
+            Assert.Equal(ProximaAcaoPartida.JogarAbertura, estadoDoTurno.ProximaAcao);
+            Assert.NotNull(estadoDoTurno.PedraAberturaObrigatoria);
+            Assert.Equal(ProximaAcaoPartida.Aguardar, estadoEmEspera.ProximaAcao);
+            Assert.Null(estadoEmEspera.PedraAberturaObrigatoria);
+
+            var foraDoTurno = await servico.PassarVezAsync(new PassarVezPartidaComando(partidaId,
+                estadoDoTurno.JogadorDoTurnoId == jogadorAId ? jogadorBId : jogadorAId, estadoDoTurno.VersaoEstado, Guid.NewGuid()));
+            Assert.Equal(CodigoResultadoPartida.ForaDoTurno, foraDoTurno.Codigo);
+
+            var passagem = await servico.PassarVezAsync(new PassarVezPartidaComando(partidaId,
+                estadoDoTurno.JogadorDoTurnoId!.Value, estadoDoTurno.VersaoEstado, Guid.NewGuid()));
+            Assert.Equal(CodigoResultadoPartida.PassagemNaoPermitida, passagem.Codigo);
+
+            var peca = estadoDoTurno.PedraAberturaObrigatoria!;
+            var pedraDiferente = estadoDoTurno.MinhaMao.First(item => item != peca);
+            var tentativaAberturaInvalida = await servico.JogarAsync(new JogarPartidaComando(partidaId,
+                estadoDoTurno.JogadorDoTurnoId.Value, pedraDiferente, LadoJogavel.Esquerda,
+                estadoDoTurno.VersaoEstado, Guid.NewGuid()));
+            Assert.Equal(CodigoResultadoPartida.EstadoInvalido, tentativaAberturaInvalida.Codigo);
+            Assert.Equal(estadoDoTurno.VersaoEstado, tentativaAberturaInvalida.EstadoAutoritativo!.VersaoEstado);
+            Assert.Empty(tentativaAberturaInvalida.EstadoAutoritativo.Tabuleiro);
+            Assert.Equal(ProximaAcaoPartida.JogarAbertura, tentativaAberturaInvalida.EstadoAutoritativo.ProximaAcao);
+            var chaveJogada = Guid.NewGuid();
+            var comandoJogada = new JogarPartidaComando(partidaId, estadoDoTurno.JogadorDoTurnoId.Value,
+                peca, LadoJogavel.Esquerda, estadoDoTurno.VersaoEstado, chaveJogada);
+            var jogada = await servico.JogarAsync(comandoJogada);
+            Assert.True(jogada.Sucesso);
+            Assert.Single(jogada.Valor!.Estado.Tabuleiro);
+            Assert.Equal(6, jogada.Valor.Estado.MinhaMao.Count);
+
+            var repetida = await servico.JogarAsync(comandoJogada);
+            Assert.True(repetida.Sucesso);
+            Assert.True(repetida.Valor!.AcaoIdempotente);
+            Assert.Single(repetida.Valor.Estado.Tabuleiro);
+
+            var chaveReutilizada = await servico.JogarAsync(comandoJogada with { Lado = LadoJogavel.Direita });
+            Assert.Equal(CodigoResultadoPartida.EntradaInvalida, chaveReutilizada.Codigo);
+
+            var concorrente = await servico.JogarAsync(comandoJogada with { ChaveIdempotencia = Guid.NewGuid() });
+            Assert.Equal(CodigoResultadoPartida.ConflitoDeEstado, concorrente.Codigo);
+            Assert.Equal(jogada.Valor.Estado.VersaoEstado, concorrente.EstadoAutoritativo!.VersaoEstado);
+        }
+
+        await using (var db = CriarContexto())
+        {
+            var servico = CriarServico(db);
+            var estado = await servico.ConsultarEstadoProprioAsync(new ConsultarEstadoProprioConsulta(partidaId, jogadorAId));
+            Assert.True(estado.Sucesso);
+            Assert.Single(estado.Valor!.Tabuleiro);
+            Assert.Contains(estado.Valor.Participantes, item => item.JogadorId == jogadorAId && item.QuantidadePedrasNaMao is 6 or 7);
+            Assert.Equal(2, estado.Valor.Participantes.Count);
+        }
+    }
+
+    [Fact(DisplayName = "Não participante não consulta nem altera a jornada")]
+    public async Task Jornada_NaoParticipante_EhRejeitado()
+    {
+        var intruso = Guid.NewGuid();
+        Guid partidaId;
+        await using (var db = CriarContexto())
+        {
+            db.Jogadores.Add(new Jogador { Id = intruso, Nome = "Carol" });
+            await db.SaveChangesAsync();
+            var servico = CriarServico(db);
+            partidaId = (await servico.CriarAsync(new CriarPartidaComando(jogadorAId, 50))).Valor!.PartidaId;
+            var consulta = await servico.ConsultarEstadoProprioAsync(new ConsultarEstadoProprioConsulta(partidaId, intruso));
+            Assert.Equal(CodigoResultadoPartida.PartidaIndisponivel, consulta.Codigo);
+        }
+    }
+
+    private JornadaPartidaService CriarServico(DominoDbContext db) => new(new EstadoPartidaRepository(db), new JogadorRepository(db));
+
+    private DominoDbContext CriarContexto() => new(new DbContextOptionsBuilder<DominoDbContext>().UseSqlite(connection).Options);
+}

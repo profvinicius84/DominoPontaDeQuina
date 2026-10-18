@@ -13,4 +13,18 @@ public class Usuario
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
     /// <summary>Obtém os jogadores associados à conta.</summary>
     public ICollection<Jogador> Jogadores { get; set; } = [];
+    /// <summary>Obtém os acessos reutilizáveis e revogáveis emitidos para a conta.</summary>
+    public ICollection<TokenAcesso> TokensAcesso { get; set; } = [];
+
+    /// <summary>Normaliza e valida o único domínio acadêmico autorizado.</summary>
+    public static string NormalizarEmailFiap(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            throw new ArgumentException("O e-mail é obrigatório.", nameof(email));
+
+        var normalizado = email.Trim().ToLowerInvariant();
+        if (!normalizado.EndsWith("@fiap.com.br", StringComparison.Ordinal))
+            throw new ArgumentException("Somente e-mails do domínio @fiap.com.br são elegíveis.", nameof(email));
+        return normalizado;
+    }
 }

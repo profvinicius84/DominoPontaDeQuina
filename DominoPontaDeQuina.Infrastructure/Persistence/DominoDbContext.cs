@@ -8,6 +8,8 @@ public class DominoDbContext(DbContextOptions<DominoDbContext> options) : DbCont
 {
     /// <summary>Obtém as contas de usuário persistidas.</summary>
     public DbSet<Usuario> Usuarios => Set<Usuario>();
+    /// <summary>Obtém os hashes de acessos reutilizáveis até revogação.</summary>
+    public DbSet<TokenAcesso> TokensAcesso => Set<TokenAcesso>();
     /// <summary>Obtém as partidas persistidas.</summary>
     public DbSet<Partida> Partidas => Set<Partida>();
     /// <summary>Obtém os jogadores persistidos.</summary>
@@ -16,6 +18,16 @@ public class DominoDbContext(DbContextOptions<DominoDbContext> options) : DbCont
     public DbSet<ParticipacaoPartida> ParticipacoesPartida => Set<ParticipacaoPartida>();
     /// <summary>Obtém os lances persistidos.</summary>
     public DbSet<Lance> Lances => Set<Lance>();
+    /// <summary>Obtém as rodadas persistidas.</summary>
+    public DbSet<RodadaPartida> RodadasPartida => Set<RodadaPartida>();
+    /// <summary>Obtém as tentativas de ação recebidas.</summary>
+    public DbSet<AcaoPartida> AcoesPartida => Set<AcaoPartida>();
+    /// <summary>Obtém as pedras privadas atualmente nas mãos dos participantes.</summary>
+    public DbSet<PedraMaoPartida> PedrasMaoPartida => Set<PedraMaoPartida>();
+    /// <summary>Obtém as pedras das cavas persistidas.</summary>
+    public DbSet<PedraCavaPartida> PedrasCavaPartida => Set<PedraCavaPartida>();
+    /// <summary>Obtém a caixa de saída persistente de notificações privadas.</summary>
+    public DbSet<EventoWebhook> EventosWebhook => Set<EventoWebhook>();
     /// <summary>Obtém os rankings persistidos.</summary>
     public DbSet<Ranking> Rankings => Set<Ranking>();
 

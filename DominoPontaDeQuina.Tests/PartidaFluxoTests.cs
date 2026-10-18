@@ -14,11 +14,8 @@ public class PartidaFluxoTests
     [Fact(DisplayName = "Deve finalizar a partida quando a pontuação alvo for atingida (Critério: Status = Finalizada).")]
     public void FinalizarPartida_DeveMarcarComoFinalizada_QuandoPontuacaoAlvoForAtingida()
     {
-        var partida = new Partida(pontuacaoAlvo: 10);
-        var timeA = new Time("Time A");
-
-        timeA.SomarPontos(10);
-        partida.Times.Add(timeA);
+        var partida = CriarPartidaComDoisJogadores(pontuacaoAlvo: 10);
+        partida.Jogadores[0].SomarPontos(10);
         partida.IniciarNovaRodada();
 
         partida.FinalizarPartida();
@@ -34,11 +31,8 @@ public class PartidaFluxoTests
     [Fact(DisplayName = "Não deve finalizar a partida quando a pontuação alvo não for atingida (Critério: Status = EmAndamento).")]
     public void FinalizarPartida_NaoDeveFinalizar_QuandoPontuacaoAlvoNaoForAtingida()
     {
-        var partida = new Partida(pontuacaoAlvo: 10);
-        var timeA = new Time("Time A");
-
-        timeA.SomarPontos(9);
-        partida.Times.Add(timeA);
+        var partida = CriarPartidaComDoisJogadores(pontuacaoAlvo: 10);
+        partida.Jogadores[0].SomarPontos(9);
         partida.IniciarNovaRodada();
 
         partida.FinalizarPartida();
@@ -56,10 +50,7 @@ public class PartidaFluxoTests
     {
         var partida = new Partida();
 
-        var ex = Assert.ThrowsAny<Exception>(() => partida.FinalizarPartida());
-
-        Assert.NotNull(ex.GetType().Namespace);
-        Assert.StartsWith("DominoPontaDeQuina", ex.GetType().Namespace);
+        Assert.Throws<InvalidOperationException>(() => partida.FinalizarPartida());
     }
 
     /// <summary>
@@ -74,9 +65,14 @@ public class PartidaFluxoTests
         var statusField = typeof(Partida).GetField("<Status>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance)!;
         statusField.SetValue(partida, StatusPartida.Finalizada);
 
-        var ex = Assert.ThrowsAny<Exception>(() => partida.IniciarNovaRodada());
+        Assert.Throws<InvalidOperationException>(() => partida.IniciarNovaRodada());
+    }
 
-        Assert.NotNull(ex.GetType().Namespace);
-        Assert.StartsWith("DominoPontaDeQuina", ex.GetType().Namespace);
+    private static Partida CriarPartidaComDoisJogadores(int pontuacaoAlvo)
+    {
+        var partida = new Partida(pontuacaoAlvo);
+        partida.AdicionarJogador(new Jogador("Alice"));
+        partida.AdicionarJogador(new Jogador("Bob"));
+        return partida;
     }
 }

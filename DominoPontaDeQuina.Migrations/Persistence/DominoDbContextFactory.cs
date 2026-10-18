@@ -8,13 +8,13 @@ namespace DominoPontaDeQuina.Migrations.Persistence;
 /// <summary>Cria o contexto em design-time para comandos de migrations.</summary>
 public sealed class DominoDbContextFactory : IDesignTimeDbContextFactory<DominoDbContext>
 {
-    /// <summary>Cria um <see cref="DominoDbContext"/> configurado para SQL Server LocalDB.</summary>
+    /// <summary>Cria um <see cref="DominoDbContext"/> configurado para SQL Server.</summary>
     /// <param name="args">Argumentos recebidos pela ferramenta do EF Core.</param>
     /// <returns>Contexto configurado para design-time.</returns>
     public DominoDbContext CreateDbContext(string[] args)
     {
         var configuration = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
+            .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: false)
             .AddEnvironmentVariables()
             .Build();

@@ -11,6 +11,8 @@ public interface IJogadorRepository : IRepository<Jogador>
     /// <param name="cancellationToken">Token de cancelamento da operação.</param>
     /// <returns>O jogador persistido.</returns>
     Task<Jogador> AdicionarComUsuarioAsync(Jogador jogador, Guid? usuarioId, CancellationToken cancellationToken = default);
+    /// <summary>Obtém o jogador associado à conta autenticada.</summary>
+    Task<Jogador?> ObterPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default);
     /// <summary>Verifica se um jogador existe.</summary>
     /// <param name="id">Identificador do jogador.</param>
     /// <param name="cancellationToken">Token de cancelamento da operação.</param>

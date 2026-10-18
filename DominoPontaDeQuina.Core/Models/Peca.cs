@@ -7,7 +7,7 @@ namespace DominoPontaDeQuina.Core.Models;
 /// </summary>
 /// <param name="valorA">O primeiro valor da peca.</param>
 /// <param name="valorB">O segundo valor da peca.</param>
-public readonly struct Peca(int valorA, int valorB)
+public readonly struct Peca(int valorA, int valorB) : IEquatable<Peca>
 {
     /// <summary>
     /// Obtem o valor do primeiro lado da peca.
@@ -31,6 +31,15 @@ public readonly struct Peca(int valorA, int valorB)
     /// </summary>
     public bool EhSena => ValorA == 6 && ValorB == 6;
 
+    /// <summary>Indica se os dois lados da peça possuem o mesmo valor.</summary>
+    public bool EhDupla => ValorA == ValorB;
+
+    /// <summary>Obtém a maior face da peça para ordenações de abertura.</summary>
+    public int MaiorFace => Math.Max(ValorA, ValorB);
+
+    /// <summary>Obtém a menor face da peça para ordenações de abertura.</summary>
+    public int MenorFace => Math.Min(ValorA, ValorB);
+
     /// <summary>
     /// Determina se a peca possui o valor informado em qualquer um de seus lados.
     /// Essa verificacao e base para regras de compatibilidade com as pontas do tabuleiro.
@@ -47,6 +56,16 @@ public readonly struct Peca(int valorA, int valorB)
     /// <returns>Uma nova peca invertida.</returns>
     public Peca Inverter() =>
         new(ValorB, ValorA);
+
+    /// <summary>Compara a pedra sem considerar a orientação de seus lados.</summary>
+    public bool Equals(Peca other) =>
+        MaiorFace == other.MaiorFace && MenorFace == other.MenorFace;
+
+    /// <inheritdoc />
+    public override bool Equals(object? obj) => obj is Peca other && Equals(other);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => HashCode.Combine(MaiorFace, MenorFace);
 
     /// <inheritdoc />
     public override string ToString() =>

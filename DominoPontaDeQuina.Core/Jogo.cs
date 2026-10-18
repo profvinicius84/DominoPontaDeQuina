@@ -47,7 +47,6 @@ public class Jogo()
         await RegistrarTimesAsync();
 
         PartidaAtual.IniciarNovaRodada();
-        PartidaAtual.RodadaAtual?.Iniciar(ObterJogadoresDaPartida(), ObterRodadaAnterior());
 
         while (PartidaAtual.Status is StatusPartida.EmAndamento)
         {
@@ -60,7 +59,6 @@ public class Jogo()
             else
             {
                 PartidaAtual.IniciarNovaRodada();
-                PartidaAtual.RodadaAtual?.Iniciar(ObterJogadoresDaPartida(), ObterRodadaAnterior());
             }
         }
     }
@@ -95,12 +93,11 @@ public class Jogo()
         if (PartidaAtual.RodadaAtual?.Status is not StatusRodada.EmAndamento)
             throw new InvalidOperationException("Nao e possivel executar uma jogada em uma rodada que nao esta em andamento.");
 
-        var jogadorAtual = PartidaAtual.RodadaAtual.JogadorAtual;
         var jogada = await GetJogadaAsync();
 
         if (!ValidarJogada(jogada))
         {
-            jogadorAtual.DefazerJogada(jogada);
+            PartidaAtual.RodadaAtual.JogadorAtual.DefazerJogada(jogada);
             jogada.MarcarComoInvalida();
             throw new InvalidOperationException("A jogada realizada e invalida.");
         }
@@ -117,8 +114,7 @@ public class Jogo()
         if (PartidaAtual?.RodadaAtual is null)
             throw new InvalidOperationException("Nao ha rodada atual para obter jogada.");
 
-        var jogadorAtual = PartidaAtual.RodadaAtual.JogadorAtual;
-        return Task.FromResult(jogadorAtual.GetJogada(PartidaAtual.RodadaAtual.Tabuleiro));
+        return Task.FromResult(PartidaAtual.RodadaAtual.ObterJogadaAtual());
     }
 
     /// <summary>
@@ -128,8 +124,21 @@ public class Jogo()
     /// <returns><see langword="true"/> quando a jogada for valida; caso contrario, <see langword="false"/>.</returns>
     public bool ValidarJogada(Jogada jogada)
     {
-        // TODO ALUNO: validar se a jogada e compativel com o estado atual do tabuleiro.
-        throw new NotImplementedException();
+        if (PartidaAtual?.RodadaAtual?.Status is not StatusRodada.EmAndamento || jogada is null)
+            return false;
+
+        var rodada = PartidaAtual.RodadaAtual;
+        if (jogada.Jogador.Id != rodada.JogadorAtual.Jogador.Id)
+            return false;
+        if (jogada.EhPassarVez())
+            return rodada.QuantidadeNaCava == 0
+                && !rodada.JogadorAtual.Pecas.Any(peca => rodada.Tabuleiro.PodeColar(peca, LadoTabuleiro.Esquerda)
+                    || rodada.Tabuleiro.PodeColar(peca, LadoTabuleiro.Direita));
+
+        return jogada.Peca is not null
+            && jogada.Lado is not null
+            && rodada.JogadorAtual.PossuiPeca(jogada.Peca.Value)
+            && rodada.Tabuleiro.PodeColar(jogada.Peca.Value, jogada.Lado.Value);
     }
 
     /// <summary>
@@ -141,10 +150,7 @@ public class Jogo()
         if (PartidaAtual is null)
             throw new InvalidOperationException("Nao ha partida atual para obter jogadores.");
 
-        return PartidaAtual.Times
-            .SelectMany(time => time.Jogadores)
-            .ToList()
-            .AsReadOnly();
+        return PartidaAtual.Jogadores.AsReadOnly();
     }
 
     /// <summary>

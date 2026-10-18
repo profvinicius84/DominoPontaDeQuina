@@ -2,7 +2,11 @@ using DominoPontaDeQuina.Domain.Entities;
 
 namespace DominoPontaDeQuina.Application.Services;
 
-/// <summary>Expõe os casos de uso de gerenciamento de partidas.</summary>
+/// <summary>
+/// Expõe os casos de uso legados de gerenciamento de partidas.
+/// A jornada jogável tipada está definida em <see cref="Partidas.Contracts.IJornadaPartidaService"/>
+/// e será orquestrada na T-16.
+/// </summary>
 public interface IPartidaService
 {
     /// <summary>Inicia uma nova partida.</summary>
