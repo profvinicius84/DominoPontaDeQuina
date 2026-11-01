@@ -27,6 +27,11 @@ public interface IJornadaPartidaService
         ConsultarEstadoProprioConsulta consulta,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Consulta a continuação da partida reiniciada para um participante autorizado.</summary>
+    Task<ResultadoPartida<EstadoPartidaParticipante>> ConsultarReinicioAsync(
+        ConsultarReinicioConsulta consulta,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Consulta a visão pública e segura de observação da partida.</summary>
     Task<ResultadoPartida<EstadoPartidaObservador>> ConsultarObservacaoAsync(
         ConsultarObservacaoConsulta consulta,
@@ -50,6 +55,11 @@ public interface IJornadaPartidaService
     /// <summary>Cancela uma partida aberta sem conceder vitória ou pontos.</summary>
     Task<ResultadoPartida<ConfirmacaoAcaoPartida>> CancelarAsync(
         CancelarPartidaComando comando,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Cria e inicia uma nova partida com os mesmos participantes.</summary>
+    Task<ResultadoPartida<ConfirmacaoAcaoPartida>> ReiniciarAsync(
+        ReiniciarPartidaComando comando,
         CancellationToken cancellationToken = default);
 
     /// <summary>Consulta resultado e histórico filtrados pela participação.</summary>

@@ -69,7 +69,8 @@ public enum TipoAcaoPartida
     Passagem,
     EncerramentoRodada,
     EncerramentoPartida,
-    CancelamentoPartida
+    CancelamentoPartida,
+    ReinicioPartida
 }
 
 /// <summary>Indica a ponta do tabuleiro registrada pela ação, sem decisão de interface.</summary>

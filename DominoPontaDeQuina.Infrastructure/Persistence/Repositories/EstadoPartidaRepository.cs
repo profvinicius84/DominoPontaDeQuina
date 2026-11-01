@@ -55,6 +55,9 @@ public sealed class EstadoPartidaRepository(DominoDbContext db) : IEstadoPartida
                 await using var transacao = await db.Database.BeginTransactionAsync(cancellationToken);
                 var novas = db.ChangeTracker.Entries<ParticipacaoPartida>().Where(e => e.State == EntityState.Added)
                     .Select(e => e.Entity).ToArray();
+                var partidasEncerradasNestaTransacao = db.ChangeTracker.Entries<Partida>()
+                    .Where(e => e.State == EntityState.Modified && e.Entity.Status == "Encerrada")
+                    .Select(e => e.Entity.Id).ToArray();
                 var autorizados = db.ChangeTracker.Entries<Jogador>().Where(e => e.Property(j => j.AtivacaoHash).IsModified)
                     .ToDictionary(e => e.Entity.Id, e => e.Property(j => j.AtivacaoHash).OriginalValue);
                 foreach (var jogadorId in novas.Select(p => p.JogadorId).Concat(autorizados.Keys).Distinct().Order())
@@ -66,7 +69,9 @@ public sealed class EstadoPartidaRepository(DominoDbContext db) : IEstadoPartida
                     { db.ChangeTracker.Clear(); return false; }
                 }
                 foreach (var nova in novas)
-                    if (await PossuiParticipacaoNaoEncerradaAsync(nova.JogadorId, nova.PartidaId, cancellationToken))
+                    if (await db.ParticipacoesPartida.AsNoTracking().AnyAsync(p => p.JogadorId == nova.JogadorId
+                        && p.PartidaId != nova.PartidaId && !partidasEncerradasNestaTransacao.Contains(p.PartidaId)
+                        && p.Partida.Status != "Encerrada", cancellationToken))
                     { db.ChangeTracker.Clear(); return false; }
                 await db.SaveChangesAsync(cancellationToken);
                 await transacao.CommitAsync(cancellationToken);

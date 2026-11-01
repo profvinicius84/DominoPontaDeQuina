@@ -11,6 +11,8 @@ using JogadorPersistido = DominoPontaDeQuina.Domain.Entities.Jogador;
 using JogadorCore = DominoPontaDeQuina.Core.Models.Jogador;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace DominoPontaDeQuina.Application.Partidas;
 
@@ -388,6 +390,114 @@ public sealed class JornadaPartidaService(
         if (!await estados.TentarSalvarAsync(cancellationToken))
             return await CriarConflitoAsync(comando.PartidaId, solicitanteId, cancellationToken);
         return SucessoAcao(partida, solicitanteId, comando.ChaveIdempotencia);
+    }
+
+    public async Task<ResultadoPartida<ConfirmacaoAcaoPartida>> ReiniciarAsync(
+        ReiniciarPartidaComando comando, CancellationToken cancellationToken = default)
+    {
+        if (!ComandoValido(comando.PartidaId, comando.SolicitanteId, comando.ChaveIdempotencia))
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.EntradaInvalida);
+
+        var anterior = await estados.ObterParaAtualizacaoAsync(comando.PartidaId, cancellationToken);
+        if (anterior is null)
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.PartidaIndisponivel);
+        var jogador = await ObterJogadorAsync(comando.SolicitanteId, comando.Acesso, cancellationToken);
+        if (jogador is null || !EhParticipante(anterior, jogador.Id))
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.SemPermissao);
+        var solicitanteId = jogador.Id;
+        var idNovaPartida = IdReinicio(comando.PartidaId, comando.ChaveIdempotencia);
+        var acaoExistente = await estados.ObterPorChaveIdempotenciaAsync(anterior.Id, solicitanteId,
+            comando.ChaveIdempotencia, cancellationToken);
+        if (acaoExistente is not null)
+        {
+            if (acaoExistente.Tipo != TipoAcaoPartida.ReinicioPartida
+                || acaoExistente.VersaoEsperada != comando.VersaoEsperada)
+                return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.EntradaInvalida, anterior, solicitanteId);
+            var repetida = await estados.ObterParaParticipanteAsync(idNovaPartida, solicitanteId, cancellationToken);
+            return repetida is null
+                ? Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.ConflitoDeEstado, anterior, solicitanteId)
+                : ResultadoPartida<ConfirmacaoAcaoPartida>.CriarSucesso(new ConfirmacaoAcaoPartida(
+                    comando.ChaveIdempotencia, true, CriarEstado(repetida, solicitanteId)));
+        }
+        if (anterior.VersaoEstado != comando.VersaoEsperada)
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.ConflitoDeEstado, anterior, solicitanteId);
+        if (anterior.Participacoes.Count != 2)
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.EstadoInvalido, anterior, solicitanteId);
+        foreach (var participante in anterior.Participacoes)
+            if (await estados.PossuiParticipacaoNaoEncerradaAsync(participante.JogadorId, anterior.Id, cancellationToken))
+                return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.EstadoInvalido, anterior, solicitanteId);
+
+        if (!EhAguardandoInicio(anterior) && !EhEmAndamento(anterior)
+            && anterior.Status != nameof(SituacaoPartida.Encerrada))
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.EstadoInvalido, anterior, solicitanteId);
+
+        var agora = DateTime.UtcNow;
+        if (anterior.Status != nameof(SituacaoPartida.Encerrada))
+        {
+            anterior.Status = nameof(SituacaoPartida.Encerrada);
+            anterior.EncerradaEmUtc = agora;
+            anterior.VencedorJogadorId = null;
+            var rodadaAtual = anterior.Rodadas.OrderByDescending(item => item.Numero).FirstOrDefault();
+            if (rodadaAtual?.Situacao == SituacaoRodadaPartida.EmAndamento)
+            {
+                rodadaAtual.Situacao = SituacaoRodadaPartida.Encerrada;
+                rodadaAtual.MotivoEncerramento = MotivoEncerramentoRodada.ReinicioPartida;
+                rodadaAtual.EncerradaEmUtc = agora;
+            }
+        }
+        var acaoReinicio = RegistrarAcao(anterior, solicitanteId, TipoAcaoPartida.ReinicioPartida,
+            comando.ChaveIdempotencia);
+        estados.AdicionarAoContexto(acaoReinicio);
+        EnfileirarEventos(anterior, "partida-reiniciada");
+
+        var nova = new EntidadePartida
+        {
+            Id = idNovaPartida,
+            PontuacaoAlvo = anterior.PontuacaoAlvo,
+            Status = nameof(SituacaoPartida.EmAndamento),
+            CriadaEm = agora
+        };
+        foreach (var participante in anterior.Participacoes.OrderBy(item => item.Posicao))
+            nova.AdicionarParticipacao(new ParticipacaoPartida
+            {
+                JogadorId = participante.JogadorId,
+                Jogador = participante.Jogador,
+                Posicao = participante.Posicao,
+                WebhookUrl = participante.WebhookUrl
+            });
+        var motor = CriarPartidaCore(nova);
+        motor.IniciarNovaRodada();
+        var rodada = new RodadaPartida { Numero = 1, IniciadaEmUtc = agora };
+        nova.AdicionarRodada(rodada);
+        AtualizarRodada(nova, rodada, motor.RodadaAtual!);
+        RegistrarAcao(nova, solicitanteId, TipoAcaoPartida.Inicio, comando.ChaveIdempotencia, rodada.Id);
+        estados.AdicionarAoContexto(nova);
+        EnfileirarEventos(nova, "partida-iniciada");
+
+        if (!await estados.TentarSalvarAsync(cancellationToken))
+            return await CriarConflitoAsync(comando.PartidaId, solicitanteId, cancellationToken);
+        return ResultadoPartida<ConfirmacaoAcaoPartida>.CriarSucesso(new ConfirmacaoAcaoPartida(
+            comando.ChaveIdempotencia, false, CriarEstado(nova, solicitanteId)));
+    }
+
+    private static Guid IdReinicio(Guid partidaId, Guid chave) => new(
+        SHA256.HashData(Encoding.UTF8.GetBytes($"reinicio:{partidaId:N}:{chave:N}"))[..16]);
+
+    public async Task<ResultadoPartida<EstadoPartidaParticipante>> ConsultarReinicioAsync(
+        ConsultarReinicioConsulta consulta, CancellationToken cancellationToken = default)
+    {
+        var estadoAnterior = await ConsultarEstadoProprioAsync(new ConsultarEstadoProprioConsulta(
+            consulta.PartidaId, consulta.SolicitanteId, consulta.Acesso), cancellationToken);
+        if (!estadoAnterior.Sucesso)
+            return ResultadoPartida<EstadoPartidaParticipante>.CriarFalha(estadoAnterior.Codigo);
+
+        var anterior = await estados.ObterParaRecuperacaoAsync(consulta.PartidaId, cancellationToken);
+        var reinicio = anterior?.Acoes.Where(acao => acao.FoiAceita && acao.Tipo == TipoAcaoPartida.ReinicioPartida)
+            .OrderByDescending(acao => acao.OrdemRecebimento).FirstOrDefault();
+        if (reinicio is null)
+            return ResultadoPartida<EstadoPartidaParticipante>.CriarFalha(CodigoResultadoPartida.PartidaIndisponivel);
+        return await ConsultarEstadoProprioAsync(new ConsultarEstadoProprioConsulta(
+            IdReinicio(consulta.PartidaId, reinicio.ChaveIdempotencia), consulta.SolicitanteId, consulta.Acesso), cancellationToken);
     }
 
     public async Task<ResultadoPartida<ResultadoHistoricoPartida>> ConsultarResultadoHistoricoAsync(

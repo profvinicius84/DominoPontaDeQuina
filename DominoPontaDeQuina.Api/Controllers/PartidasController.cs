@@ -98,6 +98,19 @@ public sealed class PartidasController(IJornadaPartidaService jornada) : Control
         request is null ? BadRequest() : Mapear(await jornada.CancelarAsync(
             new(partidaId, UsuarioId(), request.VersaoEsperada, request.ChaveIdempotencia, Acesso(request.JogadorId)), ct));
 
+    [HttpPost("{partidaId:guid}/reiniciar")]
+    [DescricaoEndpoint("Reiniciar partida", "Encerra a partida informada e inicia outra com os mesmos participantes, placar zerado e novo partidaId. A partida anterior permanece consultável. Requer dois participantes; o solicitante precisa manter seu perfil ativo.", acao: true)]
+    [ProducesResponseType(typeof(ConfirmacaoAcaoPartida), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Reiniciar(Guid partidaId, [FromBody] AcaoRequest? request, CancellationToken ct) =>
+        request is null ? BadRequest() : Mapear(await jornada.ReiniciarAsync(
+            new(partidaId, UsuarioId(), request.VersaoEsperada, request.ChaveIdempotencia, Acesso(request.JogadorId)), ct));
+
+    [HttpGet("{partidaId:guid}/reinicio")]
+    [DescricaoEndpoint("Consultar partida reiniciada", "Retorna o estado da nova partida para um participante da anterior. Retorna 404 enquanto não houver reinício. Use após receber o encerramento da partida anterior.")]
+    [ProducesResponseType(typeof(EstadoPartidaParticipante), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ConsultarReinicio(Guid partidaId, [FromQuery, BindRequired] Guid jogadorId, CancellationToken ct) =>
+        Mapear(await jornada.ConsultarReinicioAsync(new(partidaId, UsuarioId(), Acesso(jogadorId)), ct));
+
     [HttpGet("{partidaId:guid}/resultado")]
     [DescricaoEndpoint("Consultar resultado e histórico", "Retorna situação, vencedor, pontuação e eventos permitidos ao participante solicitante.")]
     [ProducesResponseType(typeof(ResultadoHistoricoPartida), StatusCodes.Status200OK)]

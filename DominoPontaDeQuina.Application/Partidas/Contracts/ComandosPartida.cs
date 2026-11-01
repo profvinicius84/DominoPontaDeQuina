@@ -62,8 +62,18 @@ public sealed record CancelarPartidaComando(
     long VersaoEsperada,
     Guid ChaveIdempotencia, AcessoJogador? Acesso = null);
 
+/// <summary>Encerra a partida atual e inicia outra com os mesmos participantes e placar zerado.</summary>
+public sealed record ReiniciarPartidaComando(
+    Guid PartidaId,
+    Guid SolicitanteId,
+    long VersaoEsperada,
+    Guid ChaveIdempotencia, AcessoJogador? Acesso = null);
+
 /// <summary>Consulta o estado permitido ao próprio participante.</summary>
 public sealed record ConsultarEstadoProprioConsulta(Guid PartidaId, Guid SolicitanteId, AcessoJogador? Acesso = null);
+
+/// <summary>Consulta a nova partida iniciada a partir da partida informada, quando houver.</summary>
+public sealed record ConsultarReinicioConsulta(Guid PartidaId, Guid SolicitanteId, AcessoJogador? Acesso = null);
 
 /// <summary>Consulta a projeção pública para acompanhamento sem mãos privadas.</summary>
 public sealed record ConsultarObservacaoConsulta(Guid PartidaId);

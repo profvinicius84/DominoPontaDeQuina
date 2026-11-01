@@ -22,6 +22,7 @@ a partida, a tela destaca a mesa verde, o placar, o turno e as pedras da sua mã
    pedra e decide se mantém o turno ou passa. Todas as decisões são da API.
 6. O cliente aplica a resposta de cada ação e consulta atualizações a cada dois segundos enquanto a partida está aberta. **Atualizar partida** permite uma consulta manual. Consulte resultado e jogadas ao terminar.
 7. **Cancelar partida** está disponível antes do início e durante o jogo. Após a confirmação, a API encerra a partida sem vencedor, preserva o placar e libera os jogadores. Use **Voltar à sala** e **Criar partida** para começar outra.
+8. **Reiniciar com os mesmos jogadores** encerra a partida atual e abre outra, com novo ID, placar zerado e primeira rodada iniciada. O segundo cliente descobre a continuidade ao consultar a partida antiga encerrada.
 
 O endereço da última API e o token são recuperados ao abrir o aplicativo. Se o token salvo ainda for válido, o login é pulado e o aplicativo abre na escolha do jogador. Um token inválido leva de volta à tela de login.
 Ao selecionar e ativar o jogador, o aplicativo também consulta a última partida desse perfil e retoma o estado atual, inclusive após fechar e reabrir a janela. O identificador da partida é salvo por endereço da API, conta e jogador. Se a preferência local não existir, **Tenho um código de partida → Retomar minha partida pelo código** consulta a participação existente. **Voltar à sala** depois do encerramento limpa somente a lembrança local da partida.

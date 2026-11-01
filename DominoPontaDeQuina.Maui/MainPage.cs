@@ -55,6 +55,7 @@ public sealed class MainPage : ContentPage
     private Button? botaoPassar;
     private Button? botaoVoltarSala;
     private Button? botaoCancelarPartida;
+    private Button? botaoReiniciarPartida;
     private Pedra? pedraSelecionada;
     private bool autenticado;
     private bool recuperacaoInicialTentada;
@@ -67,6 +68,7 @@ public sealed class MainPage : ContentPage
     private string? tokenAtual;
     private bool ocupado;
     private bool consultando;
+    private DateTime proximaConsultaReinicioUtc;
     private int geracaoConsulta;
     // Uma tentativa ambígua conserva chave e intenção para uma repetição idempotente.
     private (string Intencao, Guid Chave)? tentativa;
@@ -228,6 +230,8 @@ public sealed class MainPage : ContentPage
         painelJogo.Add(Botao("Atualizar partida", AtualizarAsync, false));
         botaoCancelarPartida = Botao("Cancelar partida", CancelarPartidaAsync, false);
         painelJogo.Add(botaoCancelarPartida);
+        botaoReiniciarPartida = Botao("Reiniciar com os mesmos jogadores", ReiniciarPartidaAsync, false);
+        painelJogo.Add(botaoReiniciarPartida);
         painelJogo.Add(Botao("Ver resultado e jogadas", async () =>
         {
             var resultado = await ClienteJogador().ResultadoAsync(Token(), PartidaId());
@@ -486,6 +490,18 @@ public sealed class MainPage : ContentPage
         await AcaoAsync("cancelar");
         mensagem.Text = "Partida cancelada. Volte à sala para criar outra.";
     }
+    private async Task ReiniciarPartidaAsync()
+    {
+        if (!await DisplayAlert("Reiniciar partida", "A partida atual será encerrada e uma nova começará com os mesmos jogadores e placar zerado. Deseja continuar?", "Reiniciar", "Voltar"))
+            return;
+        var cliente = ClienteJogador(); var segredo = Token(); var id = PartidaId(); var versao = Versao("reiniciar", id);
+        var confirmacao = await cliente.AcaoAsync(segredo, id, "reiniciar", versao,
+            Chave($"{id}/reiniciar/{versao}"));
+        fluxo.Limpar();
+        fluxo.Recuperar(confirmacao.Estado);
+        tentativa = null;
+        mensagem.Text = "Nova partida iniciada com os mesmos jogadores.";
+    }
     private async Task JogarAsync()
     {
         var cliente = ClienteJogador(); var segredo = Token(); var id = PartidaId(); var versao = Versao("jogadas", id);
@@ -580,6 +596,7 @@ public sealed class MainPage : ContentPage
         if (botaoPassar is not null) { botaoPassar.IsVisible = proxima == ProximaAcao.Passar; botaoPassar.IsEnabled = botaoPassar.IsVisible; }
         if (botaoVoltarSala is not null) botaoVoltarSala.IsVisible = estado?.Situacao == SituacaoPartida.Encerrada;
         if (botaoCancelarPartida is not null) botaoCancelarPartida.IsVisible = estado?.Situacao == SituacaoPartida.EmAndamento;
+        if (botaoReiniciarPartida is not null) botaoReiniciarPartida.IsVisible = estado?.Participantes.Count == 2;
     }
     private void LimparEstado()
     {
@@ -612,15 +629,33 @@ public sealed class MainPage : ContentPage
 
     private async Task ConsultarAtualizacoesAsync()
     {
-        if (consultando || ocupado || estado is null || estado.Situacao == SituacaoPartida.Encerrada) return;
+        if (consultando || ocupado || estado is null) return;
         var ativacaoConsultada = ativacao;
         var partidaConsultada = estado.PartidaId;
         consultando = true;
         try
         {
-            var atual = await ClienteJogador().AtualizacoesAsync(Token(), partidaConsultada, estado.VersaoEstado);
-            if (atual is not null && ativacao == ativacaoConsultada && estado?.PartidaId == partidaConsultada)
-                fluxo.Recuperar(atual);
+            if (estado.Situacao == SituacaoPartida.Encerrada)
+            {
+                if (DateTime.UtcNow < proximaConsultaReinicioUtc) return;
+                proximaConsultaReinicioUtc = DateTime.UtcNow.AddSeconds(5);
+                try
+                {
+                    var reinicio = await ClienteJogador().ReinicioAsync(Token(), partidaConsultada);
+                    if (ativacao == ativacaoConsultada && estado?.PartidaId == partidaConsultada)
+                    {
+                        fluxo.Limpar();
+                        fluxo.Recuperar(reinicio);
+                    }
+                }
+                catch (ApiException erro) when (erro.Status == 404) { }
+            }
+            else
+            {
+                var atual = await ClienteJogador().AtualizacoesAsync(Token(), partidaConsultada, estado.VersaoEstado);
+                if (atual is not null && ativacao == ativacaoConsultada && estado?.PartidaId == partidaConsultada)
+                    fluxo.Recuperar(atual);
+            }
         }
         catch (ApiException erro) when (erro.Status is 401 or 403 or 404) { LimparEstado(); }
         catch (Exception) { mensagem.Text = "Não foi possível atualizar a partida. A próxima consulta será automática."; }

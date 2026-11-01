@@ -35,8 +35,10 @@ public sealed class ApiHttpIntegrationTests : IClassFixture<ApiHttpIntegrationTe
         Assert.Equal("bearer", components.GetProperty("securitySchemes").GetProperty("Bearer").GetProperty("scheme").GetString());
         var operations = root.GetProperty("paths").EnumerateObject()
             .SelectMany(path => path.Value.EnumerateObject().Select(operation => (Path: path.Name, Operation: operation.Value))).ToArray();
-        Assert.Equal(19, operations.Length);
+        Assert.Equal(21, operations.Length);
         Assert.True(root.GetProperty("paths").TryGetProperty("/api/partidas/{partidaId}/cancelar", out _));
+        Assert.True(root.GetProperty("paths").TryGetProperty("/api/partidas/{partidaId}/reiniciar", out _));
+        Assert.True(root.GetProperty("paths").TryGetProperty("/api/partidas/{partidaId}/reinicio", out _));
         Assert.False(root.GetProperty("paths").TryGetProperty("/api/identidade/login", out _));
         foreach (var (atual, anterior) in new[]
         {
@@ -77,7 +79,7 @@ public sealed class ApiHttpIntegrationTests : IClassFixture<ApiHttpIntegrationTe
                 }
                 var expectedSchema = path.EndsWith("/visualizar", StringComparison.Ordinal) ? "EstadoPartidaObservador"
                     : path.EndsWith("/resultado", StringComparison.Ordinal) ? "ResultadoHistoricoPartida"
-                    : path is "/api/partidas" or "/api/partidas/{partidaId}" or "/api/partidas/{partidaId}/atualizacoes" ? "EstadoPartidaParticipante"
+                    : path is "/api/partidas" or "/api/partidas/{partidaId}" or "/api/partidas/{partidaId}/atualizacoes" or "/api/partidas/{partidaId}/reinicio" ? "EstadoPartidaParticipante"
                     : "ConfirmacaoAcaoPartida";
                 Assert.Equal($"#/components/schemas/{expectedSchema}", responses.GetProperty("200")
                     .GetProperty("content").GetProperty("application/json").GetProperty("schema").GetProperty("$ref").GetString());
@@ -299,6 +301,42 @@ public sealed class ApiHttpIntegrationTests : IClassFixture<ApiHttpIntegrationTe
         Assert.True(repetida.AcaoIdempotente);
         var outra = await PostarAsync<EstadoPartidaParticipante>(client, "/api/partidas", new { pontuacaoAlvo = 100 });
         Assert.NotEqual(criada.PartidaId, outra.PartidaId);
+    }
+
+    [Fact(DisplayName = "HTTP reinicia para ambos os participantes sem reutilizar o placar antigo")]
+    public async Task ReiniciarPartida_ContinuidadeDosDoisClientes()
+    {
+        using var host = new DominoApiFactory();
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            var identidade = scope.ServiceProvider.GetRequiredService<IIdentidadeAcessoService>();
+            Assert.True((await identidade.CadastrarUsuarioAutorizadoAsync("reinicio-a@fiap.com.br")).Sucesso);
+            Assert.True((await identidade.CadastrarUsuarioAutorizadoAsync("reinicio-b@fiap.com.br")).Sucesso);
+        }
+        using var client = host.CreateClient();
+        foreach (var email in new[] { "reinicio-a@fiap.com.br", "reinicio-b@fiap.com.br" })
+            Assert.Equal(HttpStatusCode.Accepted,
+                (await client.PostAsJsonAsync("/api/identidade/token", new { email })).StatusCode);
+        var tokenA = host.Entrega.ObterToken("reinicio-a@fiap.com.br");
+        var tokenB = host.Entrega.ObterToken("reinicio-b@fiap.com.br");
+        await AtivarPerfilAsync(client, tokenA);
+        var criada = await PostarAsync<EstadoPartidaParticipante>(client, "/api/partidas", new { pontuacaoAlvo = 100 });
+        await AtivarPerfilAsync(client, tokenB);
+        var ingresso = await PostarAsync<ConfirmacaoAcaoPartida>(client, $"/api/partidas/{criada.PartidaId}/entrar",
+            new { versaoEsperada = criada.VersaoEstado, chaveIdempotencia = Guid.NewGuid() });
+        await AtivarPerfilAsync(client, tokenA);
+        var inicio = await PostarAsync<ConfirmacaoAcaoPartida>(client, $"/api/partidas/{criada.PartidaId}/iniciar",
+            new { versaoEsperada = ingresso.Estado.VersaoEstado, chaveIdempotencia = Guid.NewGuid() });
+        var reinicio = await PostarAsync<ConfirmacaoAcaoPartida>(client, $"/api/partidas/{criada.PartidaId}/reiniciar",
+            new { versaoEsperada = inicio.Estado.VersaoEstado, chaveIdempotencia = Guid.NewGuid() });
+        Assert.NotEqual(criada.PartidaId, reinicio.Estado.PartidaId);
+        Assert.Equal(SituacaoPartida.EmAndamento, reinicio.Estado.Situacao);
+        Assert.All(reinicio.Estado.Participantes, item => Assert.Equal(0, item.Pontuacao));
+        await AtivarPerfilAsync(client, tokenB);
+        var continuidade = await client.GetFromJsonAsync<EstadoPartidaParticipante>(
+            $"/api/partidas/{criada.PartidaId}/reinicio?jogadorId={client.DefaultRequestHeaders.GetValues("X-Jogador-Id").Single()}");
+        Assert.Equal(reinicio.Estado.PartidaId, continuidade!.PartidaId);
+        Assert.Equal(2, continuidade.Participantes.Count);
     }
 
     private static async Task AtivarPerfilAsync(HttpClient client, string token)

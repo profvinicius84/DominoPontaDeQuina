@@ -54,6 +54,8 @@ O ingresso informa ID da partida na rota e `jogadorId` no corpo, além de versã
 | Comprar | `POST /api/partidas/{id}/comprar` | ação |
 | Passar | `POST /api/partidas/{id}/passar` | ação |
 | Cancelar | `POST /api/partidas/{id}/cancelar` | ação |
+| Reiniciar | `POST /api/partidas/{id}/reiniciar` | ação |
+| Descobrir reinício | `GET /api/partidas/{id}/reinicio?jogadorId={perfil}` | — |
 | Resultado e histórico | `GET /api/partidas/{id}/resultado?jogadorId={perfil}` | — |
 
 Corpo de ação: `{ "jogadorId": "<perfil>", "versaoEsperada": 2, "chaveIdempotencia": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }`. Inclua o cabeçalho `X-Jogador-Ativacao` nas operações de jogador.
@@ -87,9 +89,11 @@ O trecho ilustra os campos relevantes; a resposta completa inclui também versã
 
 Qualquer participante com perfil ativo pode cancelar uma partida aguardando início ou em andamento. O cancelamento encerra a partida sem vencedor (`vencedorId: null`), preserva placar, pedras e histórico e libera ambos os jogadores para criar ou ingressar em outra partida. Envie versão e chave de idempotência como nas demais ações. Repetir a mesma intenção não cancela duas vezes; uma nova tentativa após encerramento recebe `ESTADO_INVALIDO`. Para começar novamente, crie outra partida. O cancelamento aparece no estado e no evento `partida-cancelada` para clientes de webhook; a lista `eventos` do resultado continua restrita a jogadas, compras e passagens.
 
+`reiniciar` é uma ação única para uma partida com dois participantes, em andamento ou encerrada. O participante solicitante precisa manter seu perfil ativo. A API encerra a partida anterior, preserva seu placar e histórico, cria outra partida com os **mesmos dois jogadores**, mesmo alvo, pontos zerados e uma rodada nova já iniciada. A confirmação mantém o formato das outras ações; `estado.partidaId` passa a ser o **novo** ID. A mesma chave e versão repetidas devolvem a nova partida sem duplicá-la. Outro jogador que acompanha a partida antiga recebe seu encerramento por atualização ou webhook e consulta `GET /api/partidas/{idAntigo}/reinicio?jogadorId=...` para obter seu estado na nova partida; até existir reinício, essa consulta retorna `404`. Uma partida antiga pode ser consultada normalmente. Se algum participante já estiver em outra partida aberta, o reinício é rejeitado com `ESTADO_INVALIDO`.
+
 ## Consulta de atualizações
 
-O cliente consulta `/api/partidas/{id}/atualizacoes` periodicamente enquanto acompanha a partida. Envie `jogadorId`, Bearer e `X-Jogador-Ativacao` como na consulta de estado próprio. `versaoConhecida` é opcional: sem ela, a API retorna `200` e o estado atual; com a versão atual, retorna `204 No Content`; quando a versão difere, retorna `200` com a visão privada atual do jogador. O cliente MAUI consulta a cada dois segundos e aplica imediatamente o estado retornado por uma ação.
+O cliente consulta `/api/partidas/{id}/atualizacoes` periodicamente enquanto acompanha a partida. Envie `jogadorId`, Bearer e `X-Jogador-Ativacao` como na consulta de estado próprio. `versaoConhecida` é opcional: sem ela, a API retorna `200` e o estado atual; com a versão atual, retorna `204 No Content`; quando a versão difere, retorna `200` com a visão privada atual do jogador. O cliente MAUI consulta a cada dois segundos e aplica imediatamente o estado retornado por uma ação. Após encerramento, consulta a continuidade da partida para acompanhar um eventual reinício pelo adversário.
 
 As respostas de atualização exigem a posse do perfil ativo e não revelam a mão do adversário. Depois de uma desconexão, a próxima consulta recupera a versão atual. O cliente deve aplicar apenas versões mais novas para evitar regressão.
 

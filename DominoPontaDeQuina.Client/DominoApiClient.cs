@@ -59,6 +59,8 @@ public sealed class DominoApiClient(HttpClient http)
             webhook is null ? new { pontuacaoAlvo, jogadorId } : (object)new { pontuacaoAlvo, jogadorId, webhook }, ct);
     public Task<EstadoPartida> EstadoAsync(string token, Guid partidaId, CancellationToken ct = default) =>
         EnviarAsync<EstadoPartida>(HttpMethod.Get, $"api/partidas/{partidaId}?jogadorId={jogadorId}", token, null, ct);
+    public Task<EstadoPartida> ReinicioAsync(string token, Guid partidaId, CancellationToken ct = default) =>
+        EnviarAsync<EstadoPartida>(HttpMethod.Get, $"api/partidas/{partidaId}/reinicio?jogadorId={jogadorId}", token, null, ct);
     public async Task<EstadoPartida?> AtualizacoesAsync(string token, Guid partidaId, long versaoConhecida, CancellationToken ct = default)
     {
         if (versaoConhecida < 0) throw new ArgumentOutOfRangeException(nameof(versaoConhecida));
@@ -77,7 +79,7 @@ public sealed class DominoApiClient(HttpClient http)
     public Task<ConfirmacaoAcao> AcaoAsync(string token, Guid partidaId, string acao, long versaoEsperada,
         Guid chaveIdempotencia, CancellationToken ct = default)
     {
-        if (acao is not ("entrar" or "iniciar" or "passar" or "comprar" or "cancelar"))
+        if (acao is not ("entrar" or "iniciar" or "passar" or "comprar" or "cancelar" or "reiniciar"))
             throw new ArgumentException("Ação desconhecida.", nameof(acao));
         return EnviarAsync<ConfirmacaoAcao>(HttpMethod.Post, $"api/partidas/{partidaId}/{acao}", token,
             acao == "entrar" && webhook is not null

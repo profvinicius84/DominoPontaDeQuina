@@ -52,5 +52,6 @@ public enum MotivoEncerramentoRodada
 {
     MaoVazia,
     TabuleiroTravado,
-    CancelamentoPartida
+    CancelamentoPartida,
+    ReinicioPartida
 }

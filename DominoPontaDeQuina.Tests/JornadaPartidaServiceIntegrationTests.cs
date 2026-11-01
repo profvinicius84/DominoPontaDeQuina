@@ -169,6 +169,80 @@ public sealed class JornadaPartidaServiceIntegrationTests : IAsyncLifetime
         Assert.True((await servico.CriarAsync(new CriarPartidaComando(jogadorBId, 50))).Sucesso);
     }
 
+    [Theory(DisplayName = "Reinício cria outra partida com os dois jogadores e placar zerado")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReiniciarPartida_CriaNovaMesaEPermiteDescoberta(bool cancelarAntes)
+    {
+        await using var db = CriarContexto();
+        var servico = CriarServico(db);
+        var criada = await servico.CriarAsync(new CriarPartidaComando(jogadorAId, 50,
+            Webhook: "https://alice.example/callback"));
+        var antigaId = criada.Valor!.PartidaId;
+        var ingresso = await servico.IngressarAsync(new IngressarPartidaComando(antigaId, jogadorBId, 0, Guid.NewGuid(),
+            Webhook: "https://bob.example/callback"));
+        var inicio = await servico.IniciarAsync(new IniciarPartidaComando(antigaId, jogadorAId,
+            ingresso.Valor!.Estado.VersaoEstado, Guid.NewGuid()));
+        var versao = inicio.Valor!.Estado.VersaoEstado;
+        (await db.ParticipacoesPartida.SingleAsync(item => item.PartidaId == antigaId && item.JogadorId == jogadorAId)).Pontos = 7;
+        await db.SaveChangesAsync();
+        if (cancelarAntes)
+        {
+            var cancelamento = await servico.CancelarAsync(new CancelarPartidaComando(antigaId, jogadorAId, versao, Guid.NewGuid()));
+            Assert.True(cancelamento.Sucesso);
+            versao = cancelamento.Valor!.Estado.VersaoEstado;
+        }
+
+        var comando = new ReiniciarPartidaComando(antigaId, jogadorAId, versao, Guid.NewGuid());
+        var reinicio = await servico.ReiniciarAsync(comando);
+        Assert.True(reinicio.Sucesso);
+        var nova = reinicio.Valor!.Estado;
+        Assert.NotEqual(antigaId, nova.PartidaId);
+        Assert.Equal(SituacaoPartida.EmAndamento, nova.Situacao);
+        Assert.Equal(1, nova.NumeroRodada);
+        Assert.All(nova.Participantes, item => Assert.Equal(0, item.Pontuacao));
+        Assert.All(nova.Participantes, item => Assert.Equal(7, item.QuantidadePedrasNaMao));
+        Assert.Equal(2, await db.EventosWebhook.CountAsync(item =>
+            item.PartidaId == antigaId && item.Tipo == "partida-reiniciada"));
+        Assert.Equal(2, await db.EventosWebhook.CountAsync(item =>
+            item.PartidaId == nova.PartidaId && item.Tipo == "partida-iniciada"));
+        var antiga = await db.Partidas.Include(item => item.Participacoes).SingleAsync(item => item.Id == antigaId);
+        Assert.Equal("Encerrada", antiga.Status);
+        Assert.Equal(7, antiga.Participacoes.Single(item => item.JogadorId == jogadorAId).Pontos);
+        Assert.Equal(cancelarAntes ? MotivoEncerramentoRodada.CancelamentoPartida : MotivoEncerramentoRodada.ReinicioPartida,
+            (await db.RodadasPartida.SingleAsync(item => item.PartidaId == antigaId)).MotivoEncerramento);
+
+        var descoberta = await servico.ConsultarReinicioAsync(new ConsultarReinicioConsulta(antigaId, jogadorBId));
+        Assert.True(descoberta.Sucesso);
+        Assert.Equal(nova.PartidaId, descoberta.Valor!.PartidaId);
+        var repetida = await servico.ReiniciarAsync(comando);
+        Assert.True(repetida.Sucesso);
+        Assert.True(repetida.Valor!.AcaoIdempotente);
+        Assert.Equal(nova.PartidaId, repetida.Valor.Estado.PartidaId);
+        var concorrente = await servico.ReiniciarAsync(comando with { ChaveIdempotencia = Guid.NewGuid() });
+        Assert.Equal(CodigoResultadoPartida.ConflitoDeEstado, concorrente.Codigo);
+    }
+
+    [Fact(DisplayName = "Reinício não duplica jogador que já entrou em outra partida")]
+    public async Task ReiniciarPartida_RejeitaParticipanteEmOutraPartida()
+    {
+        await using var db = CriarContexto();
+        var servico = CriarServico(db);
+        var antiga = (await servico.CriarAsync(new CriarPartidaComando(jogadorAId, 50))).Valor!;
+        var ingresso = await servico.IngressarAsync(new IngressarPartidaComando(
+            antiga.PartidaId, jogadorBId, antiga.VersaoEstado, Guid.NewGuid()));
+        var cancelamento = await servico.CancelarAsync(new CancelarPartidaComando(
+            antiga.PartidaId, jogadorAId, ingresso.Valor!.Estado.VersaoEstado, Guid.NewGuid()));
+        Assert.True(cancelamento.Sucesso);
+        Assert.True((await servico.CriarAsync(new CriarPartidaComando(jogadorBId, 50))).Sucesso);
+
+        var tentativa = await servico.ReiniciarAsync(new ReiniciarPartidaComando(
+            antiga.PartidaId, jogadorAId, cancelamento.Valor!.Estado.VersaoEstado, Guid.NewGuid()));
+
+        Assert.Equal(CodigoResultadoPartida.EstadoInvalido, tentativa.Codigo);
+        Assert.Equal(2, await db.Partidas.CountAsync());
+    }
+
     [Fact(DisplayName = "Não participante não consulta nem altera a jornada")]
     public async Task Jornada_NaoParticipante_EhRejeitado()
     {

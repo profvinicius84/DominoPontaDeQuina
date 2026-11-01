@@ -2,7 +2,7 @@
 
 ## Objetivo e limite de compatibilidade
 
-Corrigir a pontuação quando uma dupla estiver em uma ponta livre, permitir que um participante encerre uma partida que não deseja continuar e tornar o contrato HTTP compreensível para clientes independentes. Preservar os campos, tipos, valores numéricos e formatos de resposta das operações existentes. A única ampliação HTTP planejada é uma rota de cancelamento que reutiliza `AcaoRequest` e `ConfirmacaoAcaoPartida`; reiniciar significa cancelar a partida atual e criar outra.
+Corrigir a pontuação quando uma dupla estiver em uma ponta livre, permitir que um participante encerre uma partida que não deseja continuar e tornar o contrato HTTP compreensível para clientes independentes. Preservar os campos, tipos, valores numéricos e formatos de resposta das operações existentes. O cancelamento reutiliza `AcaoRequest` e `ConfirmacaoAcaoPartida`. Após o retorno dos alunos, o reinício foi acrescentado como uma operação única, também com esses contratos, e uma consulta de continuidade permite ao segundo jogador encontrar a nova partida.
 
 Antes de implementar, registrar na especificação de produto a regra de dupla exposta e a política de cancelamento. Em particular: qualquer um dos participantes ativos pode cancelar uma partida aguardando início ou em andamento; a partida fica `Encerrada`, sem vencedor, mantém placar e histórico já registrados e libera ambos os jogadores para uma nova partida. Uma partida encerrada naturalmente não pode ser cancelada. O cancelamento não reverte pontos nem reabre a partida.
 
@@ -60,3 +60,11 @@ Antes de implementar, registrar na especificação de produto a regra de dupla e
 - Destino: App Service Linux `domino-quina-api-b1-pf2261`, grupo `DominoPontaDeQuina`, runtime `DOTNETCORE|8.0`. O deploy retornou `RuntimeSuccessful`, com uma instância bem-sucedida e nenhuma falha.
 - Em `https://domino-quina-api-b1-pf2261.azurewebsites.net`, `/health` e `/swagger/v1/swagger.json` retornaram `200`; o OpenAPI publicado contém 19 operações e `/api/partidas/{partidaId}/cancelar`; `/api/partidas` sem Bearer retornou `401`.
 - A verificação pública confirma inicialização, esquema acessível e autenticação da rota protegida. Uma jornada autenticada com cancelamento e o aceite visual MAUI em duas janelas não foram executados no ambiente publicado.
+
+## Complemento — reinício da partida
+
+O retorno dos alunos mostrou que a sequência manual de cancelar e criar outra partida não atende à necessidade de reinício. Foi acrescentado `POST /api/partidas/{id}/reiniciar`, que reutiliza o corpo e a confirmação de ação, encerra a partida anterior e inicia outra com os mesmos dois participantes, o mesmo alvo, nova distribuição e placar zerado. A partida anterior permanece consultável. O novo ID é derivado da partida antiga e da chave de idempotência, permitindo que a repetição da intenção encontre a mesma partida sem coluna nova no banco.
+
+O segundo cliente descobre a continuação por `GET /api/partidas/{idAntigo}/reinicio?jogadorId=...`, sujeito à mesma autorização de participante. O MAUI consulta essa rota após o encerramento e troca para o novo estado. A persistência encerra a partida antiga e cria a nova na mesma transação, com reserva dos perfis; se algum jogador já estiver em outra partida aberta, a ação é rejeitada.
+
+`dotnet test DominoPontaDeQuina.Tests/DominoPontaDeQuina.Tests.csproj --configuration Release --no-restore` aprovou 186 testes, sem falhas ou ignorados. O build MAUI concluiu com zero avisos e erros. Testes cobrem reinício ativo e após cancelamento, idempotência, consulta pelo segundo participante, eventos para ambos os webhooks e recusa quando um jogador já participa de outra partida.
