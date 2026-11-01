@@ -51,5 +51,12 @@ Antes de implementar, registrar na especificação de produto a regra de dupla e
 - A soma da dupla exposta foi corrigida no Core. Os testes cobrem extremidades esquerda/direita, o exemplo orientado do README e a concessão de 3 pontos na rodada.
 - `POST /api/partidas/{id}/cancelar` reutiliza o corpo e a confirmação de ação. O cancelamento é registrado como tipo interno textual, encerra a rodada em andamento, emite `partida-cancelada` aos webhooks registrados e libera os perfis sem atribuir vencedor. Nenhum formato das operações existentes ou esquema de banco foi alterado.
 - O cliente MAUI oferece cancelamento confirmado antes e durante a partida. Swagger e README explicam enums HTTP/webhook, histórico, variantes de `400`, chave de ativação e orientação do tabuleiro.
-- `dotnet test DominoPontaDeQuina.Tests/DominoPontaDeQuina.Tests.csproj --no-restore`: 182 aprovados, 0 falhas, 0 ignorados. `dotnet build DominoPontaDeQuina.Maui/DominoPontaDeQuina.Maui.csproj --no-restore`: sucesso, 0 avisos, 0 erros. O aceite visual em duas janelas e qualquer implantação permanecem sem execução.
+- `dotnet test DominoPontaDeQuina.Tests/DominoPontaDeQuina.Tests.csproj --configuration Release --no-restore`: 182 aprovados, 0 falhas, 0 ignorados. `dotnet build DominoPontaDeQuina.Maui/DominoPontaDeQuina.Maui.csproj --no-restore`: sucesso, 0 avisos, 0 erros. Migrations e WebhookRelay também compilaram em Release. O aceite visual em duas janelas permanece pendente.
 - Placares gravados antes desta correção não foram recalculados; eventual reconciliação exige identificação das partidas afetadas e uma operação de dados separada.
+
+## Publicação em 2026-11-01
+
+- Commit de implementação: `e94778b`. `dotnet publish` gerou pacote Release portátil para .NET 8; o ZIP foi inspecionado e não contém `appsettings.json` ou arquivos de segredo locais.
+- Destino: App Service Linux `domino-quina-api-b1-pf2261`, grupo `DominoPontaDeQuina`, runtime `DOTNETCORE|8.0`. O deploy retornou `RuntimeSuccessful`, com uma instância bem-sucedida e nenhuma falha.
+- Em `https://domino-quina-api-b1-pf2261.azurewebsites.net`, `/health` e `/swagger/v1/swagger.json` retornaram `200`; o OpenAPI publicado contém 19 operações e `/api/partidas/{partidaId}/cancelar`; `/api/partidas` sem Bearer retornou `401`.
+- A verificação pública confirma inicialização, esquema acessível e autenticação da rota protegida. Uma jornada autenticada com cancelamento e o aceite visual MAUI em duas janelas não foram executados no ambiente publicado.

@@ -8,7 +8,7 @@ Os alunos desenvolvem clientes usando os contratos públicos; as regras são exe
 API, persistência, cliente HTTP com consulta periódica, painel e MAUI estão implementados. O webhook permanece disponível para compatibilidade com clientes anteriores.
 A API usa SQL Server quando `Domino:UsarSqlite=false`; `/health` confirma a consulta ao banco.
 A suíte automatizada cobre domínio, identidade, concorrência, contratos, componentes e jornada até encerramento.
-O aceite operacional da consulta periódica ainda depende da interface MAUI com duas instâncias e do ambiente de publicação.
+O App Service de validação está publicado; o aceite operacional da consulta periódica ainda depende da interface MAUI com duas instâncias e de uma jornada autenticada no ambiente publicado.
 Consulte a [matriz de aceite T-45](sdd/features/partida-individual-plataforma/execucao-t45.md).
 
 ## Acesso e fluxo
