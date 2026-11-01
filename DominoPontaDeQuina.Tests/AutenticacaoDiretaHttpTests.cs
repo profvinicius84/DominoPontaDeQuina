@@ -11,6 +11,52 @@ namespace DominoPontaDeQuina.Tests;
 public sealed class AutenticacaoDiretaHttpTests
 {
     [Fact]
+    public async Task Token_RejeitaEmailInvalidoELimitaSolicitacoes()
+    {
+        using var host = new ApiHttpIntegrationTests.DominoApiFactory();
+        using var http = host.CreateClient();
+
+        foreach (var email in new string?[] { null, "", "@fiap.com.br", "aluno@example.com" })
+        {
+            using var resposta = await http.PostAsJsonAsync("/api/identidade/token", new { email });
+            Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+            Assert.Equal("false", await resposta.Content.ReadAsStringAsync());
+        }
+
+        for (var tentativa = 0; tentativa < 5; tentativa++)
+        {
+            var email = tentativa == 0 ? "ALUNO@FIAP.COM.BR" : "aluno@fiap.com.br";
+            using var resposta = await http.PostAsJsonAsync("/api/identidade/token", new { email });
+            Assert.Equal(HttpStatusCode.Accepted, resposta.StatusCode);
+        }
+
+        using var bloqueada = await http.PostAsJsonAsync("/api/identidade/token", new { email = "aluno@fiap.com.br" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, bloqueada.StatusCode);
+        Assert.Equal("LIMITE_EXCEDIDO", (await bloqueada.Content.ReadFromJsonAsync<RespostaErro>())!.Codigo);
+        using var outroAluno = await http.PostAsJsonAsync("/api/identidade/token", new { email = "outro@fiap.com.br" });
+        Assert.Equal(HttpStatusCode.Accepted, outroAluno.StatusCode);
+        using var scope = host.Services.CreateScope();
+        Assert.Equal(2, await scope.ServiceProvider.GetRequiredService<DominoDbContext>().Usuarios.CountAsync());
+    }
+
+    [Fact]
+    public async Task Token_LimitaCinquentaSolicitacoesPorIpMesmoComEmailsDiferentes()
+    {
+        using var host = new ApiHttpIntegrationTests.DominoApiFactory();
+        using var http = host.CreateClient();
+
+        for (var tentativa = 0; tentativa < 50; tentativa++)
+        {
+            using var resposta = await http.PostAsJsonAsync("/api/identidade/token", new { email = $"invalido-{tentativa}" });
+            Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+        }
+
+        using var bloqueada = await http.PostAsJsonAsync("/api/identidade/token", new { email = "aluno@fiap.com.br" });
+        Assert.Equal(HttpStatusCode.TooManyRequests, bloqueada.StatusCode);
+        Assert.Equal("LIMITE_EXCEDIDO", (await bloqueada.Content.ReadFromJsonAsync<RespostaErro>())!.Codigo);
+    }
+
+    [Fact]
     public async Task Login_NaoExiste()
     {
         using var host = new ApiHttpIntegrationTests.DominoApiFactory();

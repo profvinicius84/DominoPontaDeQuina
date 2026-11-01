@@ -1,3 +1,5 @@
+using System.Net.Mail;
+
 namespace DominoPontaDeQuina.Domain.Entities;
 
 /// <summary>Representa a conta de usuário usada na autenticação da aplicação.</summary>
@@ -23,8 +25,13 @@ public class Usuario
             throw new ArgumentException("O e-mail é obrigatório.", nameof(email));
 
         var normalizado = email.Trim().ToLowerInvariant();
-        if (!normalizado.EndsWith("@fiap.com.br", StringComparison.Ordinal))
-            throw new ArgumentException("Somente e-mails do domínio @fiap.com.br são elegíveis.", nameof(email));
+        var arroba = normalizado.IndexOf('@');
+        if (normalizado.Length > 254 || arroba <= 0 || arroba != normalizado.LastIndexOf('@')
+            || !string.Equals(normalizado[(arroba + 1)..], "fiap.com.br", StringComparison.Ordinal)
+            || normalizado.Any(char.IsWhiteSpace)
+            || !MailAddress.TryCreate(normalizado, out var endereco)
+            || !string.Equals(endereco.Address, normalizado, StringComparison.Ordinal))
+            throw new ArgumentException("Informe um e-mail válido do domínio @fiap.com.br.", nameof(email));
         return normalizado;
     }
 }

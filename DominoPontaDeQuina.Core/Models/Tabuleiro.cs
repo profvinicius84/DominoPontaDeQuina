@@ -76,10 +76,20 @@ public class Tabuleiro
     /// <summary>
     /// Soma os valores das pontas externas atualmente expostas.
     /// Essa soma e a base para regras de pontuacao em que a rodada concede pontos quando o resultado for multiplo de 5.
+    /// Uma dupla na extremidade contribui com suas duas faces. Se for a única peça,
+    /// ambas as faces são contadas uma única vez.
     /// </summary>
     /// <returns>A soma das pontas externas, ou 0 quando o tabuleiro estiver vazio.</returns>
-    public int SomarPontasExternas() =>
-        EstaVazio ? 0 : PontaEsquerda!.Value + PontaDireita!.Value;
+    public int SomarPontasExternas()
+    {
+        if (EstaVazio) return 0;
+        if (Pecas.Count == 1) return Pecas[0].ValorA + Pecas[0].ValorB;
+
+        var esquerda = Pecas[0];
+        var direita = Pecas[^1];
+        return (esquerda.EhDupla ? esquerda.ValorA + esquerda.ValorB : esquerda.ValorA)
+            + (direita.EhDupla ? direita.ValorA + direita.ValorB : direita.ValorB);
+    }
 
     /// <summary>
     /// Determina se o tabuleiro esta travado.

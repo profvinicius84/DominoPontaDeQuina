@@ -349,6 +349,47 @@ public sealed class JornadaPartidaService(
     }
 
     /// <inheritdoc />
+    public async Task<ResultadoPartida<ConfirmacaoAcaoPartida>> CancelarAsync(
+        CancelarPartidaComando comando, CancellationToken cancellationToken = default)
+    {
+        if (!ComandoValido(comando.PartidaId, comando.SolicitanteId, comando.ChaveIdempotencia))
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.EntradaInvalida);
+
+        var partida = await estados.ObterParaAtualizacaoAsync(comando.PartidaId, cancellationToken);
+        if (partida is null)
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.PartidaIndisponivel);
+        var jogador = await ObterJogadorAsync(comando.SolicitanteId, comando.Acesso, cancellationToken);
+        if (jogador is null || !EhParticipante(partida, jogador.Id))
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.SemPermissao);
+
+        var solicitanteId = jogador.Id;
+        var repeticao = await VerificarIdempotenciaAsync(partida, solicitanteId, comando.ChaveIdempotencia,
+            TipoAcaoPartida.CancelamentoPartida, comando.VersaoEsperada, null, null, cancellationToken);
+        if (repeticao is not null)
+            return repeticao;
+        if (partida.VersaoEstado != comando.VersaoEsperada)
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.ConflitoDeEstado, partida, solicitanteId);
+        if (!EhAguardandoInicio(partida) && !EhEmAndamento(partida))
+            return Falha<ConfirmacaoAcaoPartida>(CodigoResultadoPartida.EstadoInvalido, partida, solicitanteId);
+
+        partida.Status = nameof(SituacaoPartida.Encerrada);
+        partida.EncerradaEmUtc = DateTime.UtcNow;
+        partida.VencedorJogadorId = null;
+        var rodadaAtual = partida.Rodadas.OrderByDescending(item => item.Numero).FirstOrDefault();
+        if (rodadaAtual?.Situacao == SituacaoRodadaPartida.EmAndamento)
+        {
+            rodadaAtual.Situacao = SituacaoRodadaPartida.Encerrada;
+            rodadaAtual.MotivoEncerramento = MotivoEncerramentoRodada.CancelamentoPartida;
+            rodadaAtual.EncerradaEmUtc = partida.EncerradaEmUtc;
+        }
+        var acao = RegistrarAcao(partida, solicitanteId, TipoAcaoPartida.CancelamentoPartida, comando.ChaveIdempotencia);
+        estados.AdicionarAoContexto(acao);
+        EnfileirarEventos(partida, "partida-cancelada");
+        if (!await estados.TentarSalvarAsync(cancellationToken))
+            return await CriarConflitoAsync(comando.PartidaId, solicitanteId, cancellationToken);
+        return SucessoAcao(partida, solicitanteId, comando.ChaveIdempotencia);
+    }
+
     public async Task<ResultadoPartida<ResultadoHistoricoPartida>> ConsultarResultadoHistoricoAsync(
         ConsultarResultadoHistoricoConsulta consulta, CancellationToken cancellationToken = default)
     {

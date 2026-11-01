@@ -26,7 +26,7 @@ public sealed class EstadoPartidaRepository(DominoDbContext db) : IEstadoPartida
 
     /// <inheritdoc />
     public Task<Partida?> ObterParaAtualizacaoAsync(Guid partidaId, CancellationToken cancellationToken = default) =>
-        db.Partidas
+        db.Partidas.AsSplitQuery()
             .Include(partida => partida.Participacoes).ThenInclude(participacao => participacao.Jogador)
             .Include(partida => partida.Participacoes).ThenInclude(participacao => participacao.Mao)
             .Include(partida => partida.Rodadas.OrderBy(rodada => rodada.Numero)).ThenInclude(rodada => rodada.Cava.OrderBy(pedra => pedra.Ordem))
@@ -49,25 +49,29 @@ public sealed class EstadoPartidaRepository(DominoDbContext db) : IEstadoPartida
             .Select(e => (e.Entity.Id, Versao: e.OriginalValues.GetValue<long>(nameof(Partida.VersaoEstado)))).ToArray();
         try
         {
-            await using var transacao = await db.Database.BeginTransactionAsync(cancellationToken);
-            var novas = db.ChangeTracker.Entries<ParticipacaoPartida>().Where(e => e.State == EntityState.Added)
-                .Select(e => e.Entity).ToArray();
-            var autorizados = db.ChangeTracker.Entries<Jogador>().Where(e => e.Property(j => j.AtivacaoHash).IsModified)
-                .ToDictionary(e => e.Entity.Id, e => e.Property(j => j.AtivacaoHash).OriginalValue);
-            foreach (var jogadorId in novas.Select(p => p.JogadorId).Concat(autorizados.Keys).Distinct().Order())
+            var estrategia = db.Database.CreateExecutionStrategy();
+            return await estrategia.ExecuteAsync(async () =>
             {
-                var consulta = db.Jogadores.Where(j => j.Id == jogadorId);
-                if (autorizados.TryGetValue(jogadorId, out var hash)) consulta = consulta.Where(j => j.AtivacaoHash == hash);
-                // Reserva a linha do perfil até o commit; outros ingressos e liberações aguardam.
-                if (await consulta.ExecuteUpdateAsync(s => s.SetProperty(j => j.Nome, j => j.Nome), cancellationToken) != 1)
-                { db.ChangeTracker.Clear(); return false; }
-            }
-            foreach (var nova in novas)
-                if (await PossuiParticipacaoNaoEncerradaAsync(nova.JogadorId, nova.PartidaId, cancellationToken))
-                { db.ChangeTracker.Clear(); return false; }
-            await db.SaveChangesAsync(cancellationToken);
-            await transacao.CommitAsync(cancellationToken);
-            return true;
+                await using var transacao = await db.Database.BeginTransactionAsync(cancellationToken);
+                var novas = db.ChangeTracker.Entries<ParticipacaoPartida>().Where(e => e.State == EntityState.Added)
+                    .Select(e => e.Entity).ToArray();
+                var autorizados = db.ChangeTracker.Entries<Jogador>().Where(e => e.Property(j => j.AtivacaoHash).IsModified)
+                    .ToDictionary(e => e.Entity.Id, e => e.Property(j => j.AtivacaoHash).OriginalValue);
+                foreach (var jogadorId in novas.Select(p => p.JogadorId).Concat(autorizados.Keys).Distinct().Order())
+                {
+                    var consulta = db.Jogadores.Where(j => j.Id == jogadorId);
+                    if (autorizados.TryGetValue(jogadorId, out var hash)) consulta = consulta.Where(j => j.AtivacaoHash == hash);
+                    // Reserva a linha do perfil até o commit; outros ingressos e liberações aguardam.
+                    if (await consulta.ExecuteUpdateAsync(s => s.SetProperty(j => j.Nome, j => j.Nome), cancellationToken) != 1)
+                    { db.ChangeTracker.Clear(); return false; }
+                }
+                foreach (var nova in novas)
+                    if (await PossuiParticipacaoNaoEncerradaAsync(nova.JogadorId, nova.PartidaId, cancellationToken))
+                    { db.ChangeTracker.Clear(); return false; }
+                await db.SaveChangesAsync(cancellationToken);
+                await transacao.CommitAsync(cancellationToken);
+                return true;
+            });
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -141,5 +145,5 @@ public sealed class EstadoPartidaRepository(DominoDbContext db) : IEstadoPartida
             .Include(partida => partida.Acoes.OrderBy(acao => acao.OrdemRecebimento))
             .SingleOrDefaultAsync(partida => partida.Id == partidaId, cancellationToken);
 
-    private IQueryable<Partida> CriarConsultaBase() => db.Partidas.AsNoTracking();
+    private IQueryable<Partida> CriarConsultaBase() => db.Partidas.AsNoTracking().AsSplitQuery();
 }

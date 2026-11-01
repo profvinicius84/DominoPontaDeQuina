@@ -110,6 +110,65 @@ public sealed class JornadaPartidaServiceIntegrationTests : IAsyncLifetime
         }
     }
 
+    [Theory(DisplayName = "Cancelamento encerra sem vencedor, é idempotente e libera os jogadores")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CancelarPartida_LiberaJogadores(bool iniciar)
+    {
+        await using var db = CriarContexto();
+        var servico = CriarServico(db);
+        var criada = await servico.CriarAsync(new CriarPartidaComando(jogadorAId, 50,
+            Webhook: "https://alice.example/callback"));
+        var partidaId = criada.Valor!.PartidaId;
+        var ingresso = await servico.IngressarAsync(new IngressarPartidaComando(partidaId, jogadorBId, 0, Guid.NewGuid(),
+            Webhook: "https://bob.example/callback"));
+        Assert.True(ingresso.Sucesso);
+        var versao = ingresso.Valor!.Estado.VersaoEstado;
+        if (iniciar)
+        {
+            var inicio = await servico.IniciarAsync(new IniciarPartidaComando(partidaId, jogadorAId, versao, Guid.NewGuid()));
+            Assert.True(inicio.Sucesso);
+            versao = inicio.Valor!.Estado.VersaoEstado;
+        }
+
+        var intruso = await servico.CancelarAsync(new CancelarPartidaComando(partidaId, Guid.NewGuid(), versao, Guid.NewGuid()));
+        Assert.Equal(CodigoResultadoPartida.SemPermissao, intruso.Codigo);
+
+        var comando = new CancelarPartidaComando(partidaId, jogadorAId, versao, Guid.NewGuid());
+        var cancelada = await servico.CancelarAsync(comando);
+        Assert.True(cancelada.Sucesso);
+        Assert.Equal(SituacaoPartida.Encerrada, cancelada.Valor!.Estado.Situacao);
+        Assert.Null(cancelada.Valor.Estado.VencedorId);
+        Assert.Equal(versao + 1, cancelada.Valor.Estado.VersaoEstado);
+        Assert.Equal(2, await db.EventosWebhook.CountAsync(evento =>
+            evento.PartidaId == partidaId && evento.Tipo == "partida-cancelada"));
+        Assert.Equal(TipoAcaoPartida.CancelamentoPartida,
+            (await db.AcoesPartida.SingleAsync(acao => acao.PartidaId == partidaId && acao.ChaveIdempotencia == comando.ChaveIdempotencia)).Tipo);
+        if (iniciar)
+        {
+            var rodada = await db.RodadasPartida.SingleAsync(item => item.PartidaId == partidaId);
+            Assert.Equal(SituacaoRodadaPartida.Encerrada, rodada.Situacao);
+            Assert.Equal(MotivoEncerramentoRodada.CancelamentoPartida, rodada.MotivoEncerramento);
+        }
+
+        var repetida = await servico.CancelarAsync(comando);
+        Assert.True(repetida.Sucesso);
+        Assert.True(repetida.Valor!.AcaoIdempotente);
+        var concorrente = await servico.CancelarAsync(comando with { ChaveIdempotencia = Guid.NewGuid() });
+        Assert.Equal(CodigoResultadoPartida.ConflitoDeEstado, concorrente.Codigo);
+        var novaTentativa = await servico.CancelarAsync(comando with
+        {
+            VersaoEsperada = versao + 1,
+            ChaveIdempotencia = Guid.NewGuid()
+        });
+        Assert.Equal(CodigoResultadoPartida.EstadoInvalido, novaTentativa.Codigo);
+        Assert.Equal(SituacaoPartida.Encerrada,
+            (await servico.ConsultarEstadoProprioAsync(new ConsultarEstadoProprioConsulta(partidaId, jogadorBId))).Valor!.Situacao);
+
+        Assert.True((await servico.CriarAsync(new CriarPartidaComando(jogadorAId, 50))).Sucesso);
+        Assert.True((await servico.CriarAsync(new CriarPartidaComando(jogadorBId, 50))).Sucesso);
+    }
+
     [Fact(DisplayName = "Não participante não consulta nem altera a jornada")]
     public async Task Jornada_NaoParticipante_EhRejeitado()
     {

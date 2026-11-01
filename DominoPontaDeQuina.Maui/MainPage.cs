@@ -6,7 +6,8 @@ namespace DominoPontaDeQuina.Maui;
 /// <summary>Interface de referência: nenhuma regra de jogo é executada no cliente.</summary>
 public sealed class MainPage : ContentPage
 {
-    private readonly Entry endereco = new() { Text = "http://localhost:5180", Placeholder = "Endereço HTTPS da API" };
+    private const string EnderecoPadrao = "https://domino-quina-api-b1-pf2261.azurewebsites.net";
+    private readonly Entry endereco = new() { Text = EnderecoPadrao, Placeholder = "Endereço HTTPS da API" };
     private readonly Entry email = new() { Placeholder = "E-mail autorizado", Keyboard = Keyboard.Email };
     private readonly Entry token = new() { Placeholder = "Token recebido por e-mail", IsPassword = true };
     private readonly Entry nomePerfil = new() { Placeholder = "Nome do novo jogador" };
@@ -16,6 +17,7 @@ public sealed class MainPage : ContentPage
     private (Guid JogadorId, string Chave, string Token, string Endereco)? ativacao;
     private FileStream? travaPerfil;
     private string? escopoTrava;
+    private string? chavePartida;
     private readonly Entry identificador = new() { Placeholder = "Identificador da partida" };
     private readonly Entry alvo = new() { Text = "20", Placeholder = "Pontuação-alvo", Keyboard = Keyboard.Numeric };
     private readonly Entry versaoIngresso = new() { Text = "0", Placeholder = "Versão para ingresso", Keyboard = Keyboard.Numeric };
@@ -52,6 +54,7 @@ public sealed class MainPage : ContentPage
     private Button? botaoComprar;
     private Button? botaoPassar;
     private Button? botaoVoltarSala;
+    private Button? botaoCancelarPartida;
     private Pedra? pedraSelecionada;
     private bool autenticado;
     private bool recuperacaoInicialTentada;
@@ -180,6 +183,7 @@ public sealed class MainPage : ContentPage
         entradaPorCodigo.Add(new Label { Text = "Versão para entrar", TextColor = Cor("#AFC0B5"), FontSize = 12 });
         entradaPorCodigo.Add(versaoIngresso);
         entradaPorCodigo.Add(Botao("Entrar com código", () => AcaoAsync("entrar")));
+        entradaPorCodigo.Add(Botao("Retomar minha partida pelo código", AtualizarAsync, false));
         escolhaPartida.Add(entradaPorCodigo);
         painelSala.Add(escolhaPartida);
 
@@ -188,12 +192,13 @@ public sealed class MainPage : ContentPage
         partidaAguardando.Add(resumo);
         partidaAguardando.Add(Botao("Iniciar partida", () => AcaoAsync("iniciar")));
         partidaAguardando.Add(Botao("Atualizar mesa", AtualizarAsync, false));
+        partidaAguardando.Add(Botao("Cancelar partida", CancelarPartidaAsync, false));
         painelSala.Add(partidaAguardando);
         painelSala.Add(Botao("Trocar jogador", async () =>
         {
             await ClienteJogador().LiberarJogadorAsync(Token());
             if (escopoTrava is not null) SecureStorage.Default.Remove(escopoTrava);
-            ativacao = null; travaPerfil?.Dispose(); travaPerfil = null; escopoTrava = null;
+            ativacao = null; travaPerfil?.Dispose(); travaPerfil = null; escopoTrava = null; chavePartida = null;
             LimparEstado(); AtualizarPaineis(); mensagem.Text = "Escolha outro jogador.";
         }, false));
 
@@ -221,6 +226,8 @@ public sealed class MainPage : ContentPage
         botaoComprar = Botao("Comprar pedra", () => AcaoAsync("comprar")); painelJogo.Add(botaoComprar);
         botaoPassar = Botao("Passar a vez", () => AcaoAsync("passar")); painelJogo.Add(botaoPassar);
         painelJogo.Add(Botao("Atualizar partida", AtualizarAsync, false));
+        botaoCancelarPartida = Botao("Cancelar partida", CancelarPartidaAsync, false);
+        painelJogo.Add(botaoCancelarPartida);
         painelJogo.Add(Botao("Ver resultado e jogadas", async () =>
         {
             var resultado = await ClienteJogador().ResultadoAsync(Token(), PartidaId());
@@ -229,7 +236,11 @@ public sealed class MainPage : ContentPage
             mensagem.Text = "Resultado consultado.";
         }, false));
         historico.TextColor = Cor("#D3DED6"); painelJogo.Add(historico);
-        botaoVoltarSala = Botao("Voltar à sala", async () => { LimparEstado(); AtualizarPaineis(); await Task.CompletedTask; }, false);
+        botaoVoltarSala = Botao("Voltar à sala", async () =>
+        {
+            if (chavePartida is not null) Preferences.Default.Remove(chavePartida);
+            LimparEstado(); AtualizarPaineis(); await Task.CompletedTask;
+        }, false);
         painelJogo.Add(botaoVoltarSala);
 
         cartaoAcesso = Cartao(painelAcesso);
@@ -243,7 +254,7 @@ public sealed class MainPage : ContentPage
         {
             SecureStorage.Default.Remove("token-" + EscopoApi());
             token.Text = ""; tokenAtual = null; ativacao = null; LimparEstado();
-            travaPerfil?.Dispose(); travaPerfil = null; escopoTrava = null;
+            travaPerfil?.Dispose(); travaPerfil = null; escopoTrava = null; chavePartida = null;
             perfis.ItemsSource = null; autenticado = false;
             http?.Dispose(); http = null; api = null; enderecoAtual = null;
             AtualizarPaineis();
@@ -260,7 +271,8 @@ public sealed class MainPage : ContentPage
         if (perfis.SelectedItem is not PerfilJogador perfil) throw new ArgumentException("Selecione um jogador.");
         var sessao = await cliente.SessaoAsync(acesso);
         var escopo = $"{enderecoAtual}/{sessao.UsuarioId}/{perfil.JogadorId}";
-        var armazenamento = "ativacao-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(escopo)));
+        var escopoHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(escopo)));
+        var armazenamento = "ativacao-" + escopoHash;
         FileStream? novaTrava = null;
         try
         {
@@ -273,6 +285,7 @@ public sealed class MainPage : ContentPage
             await SecureStorage.Default.SetAsync(armazenamento, chave);
             await cliente.AtivarJogadorAsync(acesso, perfil.JogadorId, chave);
             ativacao = (perfil.JogadorId, chave, acesso, enderecoAtual!);
+            chavePartida = "partida-" + escopoHash;
             if (novaTrava is not null)
             {
                 travaPerfil?.Dispose();
@@ -284,7 +297,22 @@ public sealed class MainPage : ContentPage
         finally { novaTrava?.Dispose(); }
         LimparEstado();
         AtualizarPaineis();
-        mensagem.Text = "Jogador pronto. Escolha uma partida.";
+        var partidaSalva = Preferences.Default.Get(chavePartida!, string.Empty);
+        if (Guid.TryParse(partidaSalva, out var id) && id != Guid.Empty)
+        {
+            identificador.Text = id.ToString();
+            try
+            {
+                fluxo.Recuperar(await ClienteJogador().EstadoAsync(acesso, id));
+                mensagem.Text = "Partida retomada.";
+            }
+            catch (ApiException erro) when (erro.Status == 404)
+            {
+                Preferences.Default.Remove(chavePartida!);
+                mensagem.Text = "A partida anterior não está mais disponível. Escolha outra partida.";
+            }
+        }
+        else mensagem.Text = "Jogador pronto. Escolha uma partida.";
     }
 
     private static Color Cor(string codigo) => Color.FromArgb(codigo);
@@ -318,7 +346,7 @@ public sealed class MainPage : ContentPage
         recuperacaoInicialTentada = true;
         try
         {
-            endereco.Text = Preferences.Default.Get("ultimo-endereco-api", endereco.Text ?? "http://localhost:5180");
+            endereco.Text = Preferences.Default.Get("ultimo-endereco-api", EnderecoPadrao);
             var salvo = await SecureStorage.Default.GetAsync("token-" + EscopoApi());
             if (string.IsNullOrWhiteSpace(salvo)) return;
             ocupado = true; indicador.IsRunning = true;
@@ -358,8 +386,13 @@ public sealed class MainPage : ContentPage
             foreach (var item in botoes) item.IsEnabled = false;
             endereco.IsEnabled = token.IsEnabled = identificador.IsEnabled = false;
             indicador.IsRunning = true;
+            var mensagemAnterior = mensagem.Text;
             mensagem.Text = "Aguardando resposta…";
-            try { await acao(); }
+            try
+            {
+                await acao();
+                if (mensagem.Text == "Aguardando resposta…") mensagem.Text = mensagemAnterior;
+            }
             catch (ApiException erro)
             {
                 if (erro.EstadoAutoritativo is not null) fluxo.Recuperar(erro.EstadoAutoritativo);
@@ -446,6 +479,13 @@ public sealed class MainPage : ContentPage
             () => cliente.EstadoAsync(segredo, id));
         tentativa = null; mensagem.Text = "Ação confirmada e estado sincronizado.";
     }
+    private async Task CancelarPartidaAsync()
+    {
+        if (!await DisplayAlert("Cancelar partida", "A partida será encerrada sem vencedor. O placar e o histórico serão preservados. Deseja continuar?", "Cancelar partida", "Voltar"))
+            return;
+        await AcaoAsync("cancelar");
+        mensagem.Text = "Partida cancelada. Volte à sala para criar outra.";
+    }
     private async Task JogarAsync()
     {
         var cliente = ClienteJogador(); var segredo = Token(); var id = PartidaId(); var versao = Versao("jogadas", id);
@@ -465,6 +505,7 @@ public sealed class MainPage : ContentPage
     {
         estado = atual;
         identificador.Text = atual.PartidaId.ToString();
+        if (chavePartida is not null) Preferences.Default.Set(chavePartida, atual.PartidaId.ToString());
         versaoIngresso.Text = atual.VersaoEstado.ToString();
         resumo.Text = $"Código: {atual.PartidaId}\n" +
             (atual.Participantes.Count < 2 ? "Aguardando outro jogador entrar." : "Dois jogadores na mesa. A partida pode começar.");
@@ -538,6 +579,7 @@ public sealed class MainPage : ContentPage
         if (botaoComprar is not null) { botaoComprar.IsVisible = proxima == ProximaAcao.Comprar; botaoComprar.IsEnabled = botaoComprar.IsVisible; }
         if (botaoPassar is not null) { botaoPassar.IsVisible = proxima == ProximaAcao.Passar; botaoPassar.IsEnabled = botaoPassar.IsVisible; }
         if (botaoVoltarSala is not null) botaoVoltarSala.IsVisible = estado?.Situacao == SituacaoPartida.Encerrada;
+        if (botaoCancelarPartida is not null) botaoCancelarPartida.IsVisible = estado?.Situacao == SituacaoPartida.EmAndamento;
     }
     private void LimparEstado()
     {
@@ -571,11 +613,14 @@ public sealed class MainPage : ContentPage
     private async Task ConsultarAtualizacoesAsync()
     {
         if (consultando || ocupado || estado is null || estado.Situacao == SituacaoPartida.Encerrada) return;
+        var ativacaoConsultada = ativacao;
+        var partidaConsultada = estado.PartidaId;
         consultando = true;
         try
         {
-            var atual = await ClienteJogador().AtualizacoesAsync(Token(), estado.PartidaId, estado.VersaoEstado);
-            if (atual is not null) fluxo.Recuperar(atual);
+            var atual = await ClienteJogador().AtualizacoesAsync(Token(), partidaConsultada, estado.VersaoEstado);
+            if (atual is not null && ativacao == ativacaoConsultada && estado?.PartidaId == partidaConsultada)
+                fluxo.Recuperar(atual);
         }
         catch (ApiException erro) when (erro.Status is 401 or 403 or 404) { LimparEstado(); }
         catch (Exception) { mensagem.Text = "Não foi possível atualizar a partida. A próxima consulta será automática."; }

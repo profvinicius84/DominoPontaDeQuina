@@ -139,8 +139,8 @@ public class TabuleiroTests
 
         // Assert
         Assert.Equal(12, soma1); // 6 + 6
-        Assert.Equal(10, soma2); // 6 + 4
-        Assert.Equal(8, soma3);  // 6 + 2
+        Assert.Equal(16, soma2); // 6 + 6 + 4
+        Assert.Equal(14, soma3); // 6 + 6 + 2
         Assert.Equal(3, tabuleiro.Pecas.Count);
     }
 
@@ -171,6 +171,42 @@ public class TabuleiroTests
     }
 
     #endregion
+
+    [Fact(DisplayName = "Dupla exposta à direita soma ambas as faces sem alterar o encaixe")]
+    public void Tabuleiro_DuplaNaDireita_SomaQuinze()
+    {
+        var tabuleiro = new Tabuleiro();
+        tabuleiro.Colar(new Peca(3, 6), LadoTabuleiro.Direita);
+        tabuleiro.Colar(new Peca(6, 6), LadoTabuleiro.Direita);
+
+        Assert.Equal(3, tabuleiro.PontaEsquerda);
+        Assert.Equal(6, tabuleiro.PontaDireita);
+        Assert.Equal(15, tabuleiro.SomarPontasExternas());
+    }
+
+    [Fact(DisplayName = "Dupla exposta à esquerda soma ambas as faces")]
+    public void Tabuleiro_DuplaNaEsquerda_SomaQuinze()
+    {
+        var tabuleiro = new Tabuleiro();
+        tabuleiro.Colar(new Peca(6, 3), LadoTabuleiro.Direita);
+        tabuleiro.Colar(new Peca(6, 6), LadoTabuleiro.Esquerda);
+
+        Assert.Equal(15, tabuleiro.SomarPontasExternas());
+    }
+
+    [Fact(DisplayName = "Exemplo documentado mantém ordem e pontas livres")]
+    public void Tabuleiro_ExemploDocumentado_ConfereOrientacao()
+    {
+        var tabuleiro = new Tabuleiro();
+        tabuleiro.Colar(new Peca(3, 5), LadoTabuleiro.Direita);
+        tabuleiro.Colar(new Peca(5, 6), LadoTabuleiro.Direita);
+        tabuleiro.Colar(new Peca(6, 6), LadoTabuleiro.Direita);
+
+        Assert.Equal(new[] { new Peca(3, 5), new Peca(5, 6), new Peca(6, 6) }, tabuleiro.Pecas);
+        Assert.Equal(3, tabuleiro.PontaEsquerda);
+        Assert.Equal(6, tabuleiro.PontaDireita);
+        Assert.Equal(15, tabuleiro.SomarPontasExternas());
+    }
 
     #region Gaps de Implementação
 

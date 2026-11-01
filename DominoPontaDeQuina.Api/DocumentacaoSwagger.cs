@@ -32,17 +32,6 @@ internal static class DocumentacaoSwagger
         return services;
     }
 
-    public static RouteHandlerBuilder DocumentarPartida<T>(this RouteHandlerBuilder endpoint,
-        string resumo, string descricao, bool acao = false)
-    {
-        if (acao)
-            descricao += " Use versaoEsperada do último estado e um UUID novo em chaveIdempotencia para cada intenção. " +
-                "Repetir a mesma intenção com a mesma chave não duplica a ação. Em 409, atualize a cópia local com estadoAutoritativo.";
-        return endpoint.WithSummary(resumo).WithDescription(descricao)
-            .Produces<T>().Produces<RespostaErro>(400).Produces<RespostaErro>(401)
-            .Produces<RespostaErro>(403).Produces<RespostaErro>(404)
-            .Produces<RespostaErro>(409).Produces<RespostaErro>(422).Produces<RespostaErro>(500);
-    }
 }
 
 internal sealed class ContratoOperationFilter : IOperationFilter
@@ -50,7 +39,22 @@ internal sealed class ContratoOperationFilter : IOperationFilter
     public void Apply(OpenApiOperation operation, OperationFilterContext context)
     {
         var metadata = context.ApiDescription.ActionDescriptor.EndpointMetadata;
-        if (metadata.OfType<IAuthorizeData>().Any() && !metadata.OfType<IAllowAnonymous>().Any())
+        var action = context.MethodInfo;
+        var controller = action.DeclaringType;
+        var descricao = action.GetCustomAttributes(typeof(DescricaoEndpointAttribute), true)
+            .OfType<DescricaoEndpointAttribute>().FirstOrDefault();
+        if (descricao is not null)
+        {
+            operation.Summary = descricao.Resumo;
+            operation.Description = descricao.Descricao;
+        }
+
+        var exigeAutorizacao = metadata.OfType<IAuthorizeData>().Any()
+            || action.IsDefined(typeof(AuthorizeAttribute), true)
+            || controller?.IsDefined(typeof(AuthorizeAttribute), true) == true;
+        var permiteAnonimo = metadata.OfType<IAllowAnonymous>().Any()
+            || action.IsDefined(typeof(AllowAnonymousAttribute), true);
+        if (exigeAutorizacao && !permiteAnonimo)
             operation.Security = [new OpenApiSecurityRequirement
             {
                 [new OpenApiSecurityScheme { Reference = new OpenApiReference
@@ -114,7 +118,9 @@ internal sealed class ContratoOperationFilter : IOperationFilter
                 "204" => rota.EndsWith("/atualizacoes", StringComparison.Ordinal)
                     ? "Sem alteração desde versaoConhecida; sem corpo."
                     : "Token revogado; sem corpo.",
-                "400" => "ENTRADA_INVALIDA: revise os campos. Erros de desserialização podem ser rejeitados pelo framework sem este envelope JSON.",
+                "400" => rota == "api/identidade/token"
+                    ? "E-mail malformado ou fora de @fiap.com.br: retorna o booleano false."
+                    : "ENTRADA_INVALIDA: revise os campos. Erros de desserialização podem ser rejeitados pelo framework sem este envelope JSON.",
                 "401" => "NAO_AUTENTICADO: token ausente, inválido ou revogado.",
                 "403" => "SEM_PERMISSAO: usuário sem permissão para a operação.",
                 "404" => "PARTIDA_INDISPONIVEL: partida não encontrada ou indisponível ao solicitante.",
@@ -122,7 +128,7 @@ internal sealed class ContratoOperationFilter : IOperationFilter
                     ? "JOGADOR_JA_ATIVO: este perfil já está reservado por outra chave de ativação."
                     : "CONFLITO_DE_ESTADO: atualize a cópia local com estadoAutoritativo antes de uma nova intenção.",
                 "422" => "Regra rejeitada: ESTADO_INVALIDO, FORA_DO_TURNO, PECA_AUSENTE, ENCAIXE_INVALIDO ou PASSAGEM_NAO_PERMITIDA. Não houve alteração.",
-                "429" => "LIMITE_EXCEDIDO: máximo de cinco solicitações por origem a cada dez minutos.",
+                "429" => "LIMITE_EXCEDIDO: máximo de cinco solicitações por e-mail e 50 por IP de origem a cada dez minutos.",
                 "500" => "ERRO_INTERNO: falha inesperada ao processar a operação.",
                 _ => response.Description
             };
@@ -138,6 +144,8 @@ internal sealed class ContratoSchemaFilter : ISchemaFilter
     {
         if (context.Type == typeof(LadoJogavel)) schema.Description = "Ponta do tabuleiro: 0 = esquerda; 1 = direita.";
         if (context.Type == typeof(SituacaoPartida)) schema.Description = "0 = aguardando início; 1 = em andamento; 2 = encerrada.";
+        if (context.Type == typeof(ProximaAcaoPartida)) schema.Description = "HTTP: 0 = aguardar; 1 = jogarAbertura; 2 = jogar; 3 = comprar; 4 = passar; 5 = encerrada. No webhook, os nomes são enviados como strings.";
+        if (context.Type == typeof(EventoHistoricoPartida)) schema.Description = "Jogada: pecaJogada e lado preenchidos, passouVez=false. Passagem explícita: pecaJogada e lado null, passouVez=true. Compra: pecaJogada e lado null, passouVez=false, mesmo quando avança o turno. Os campos nulos constam no JSON.";
 
         foreach (var (name, property) in schema.Properties)
         {
@@ -150,10 +158,15 @@ internal sealed class ContratoSchemaFilter : ISchemaFilter
                 "senha" => "Senha acadêmica exigida para solicitar acesso.",
                 "jogadorId" => "Identificador do perfil pertencente à conta autenticada; operações de jogo exigem sua ativação exclusiva.",
                 "webhook" => "Opcional para compatibilidade com clientes antigos. Clientes novos consultam /atualizacoes e não precisam enviar webhook.",
-                "chaveAtivacao" => "Segredo de 32 bytes aleatórios em 64 caracteres hexadecimais, gerado e guardado pelo cliente antes de ativar. Nunca use o token da conta como chave.",
+                "chaveAtivacao" => "Obrigatória e não nula ao ativar: 32 bytes aleatórios em exatamente 64 caracteres hexadecimais (0-9, a-f ou A-F), gerados e guardados pelo cliente. Nunca use o token da conta como chave.",
                 "email" => "E-mail FIAP que receberá o token; a conta é criada se ainda não existir.",
                 "estadoAutoritativo" => "Estado atual filtrado para o participante, quando disponível; pode ser nulo.",
                 "minhaMao" => "Pedras privadas do solicitante. Não inclui pedras do adversário.",
+                "tabuleiro" => "Peças orientadas da esquerda para a direita. Em lista não vazia, a ponta livre esquerda é o valorA da primeira peça e a direita é o valorB da última. Lista vazia não tem pontas.",
+                "proximaAcao" => "HTTP: 0=aguardar, 1=jogarAbertura, 2=jogar, 3=comprar, 4=passar, 5=encerrada. No webhook são strings.",
+                "pecaJogada" => "Pedra jogada; null em compra ou passagem. O JSON atual inclui o campo nulo.",
+                "lado" when context.Type == typeof(EventoHistoricoPartida) => "Lado da jogada; null em compra ou passagem. O JSON atual inclui o campo nulo.",
+                "passouVez" => "True somente na ação explícita de passagem. Uma compra que também avançar o turno permanece registrada como compra com false.",
                 "acaoIdempotente" => "Indica repetição de uma intenção já aceita, sem executar novamente a ação.",
                 _ => property.Description
             };

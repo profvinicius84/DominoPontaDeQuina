@@ -55,6 +55,13 @@ public sealed record PassarVezPartidaComando(
     long VersaoEsperada,
     Guid ChaveIdempotencia, AcessoJogador? Acesso = null);
 
+/// <summary>Solicita o cancelamento voluntário de uma partida ainda aberta.</summary>
+public sealed record CancelarPartidaComando(
+    Guid PartidaId,
+    Guid SolicitanteId,
+    long VersaoEsperada,
+    Guid ChaveIdempotencia, AcessoJogador? Acesso = null);
+
 /// <summary>Consulta o estado permitido ao próprio participante.</summary>
 public sealed record ConsultarEstadoProprioConsulta(Guid PartidaId, Guid SolicitanteId, AcessoJogador? Acesso = null);
 

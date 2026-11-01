@@ -51,6 +51,8 @@ O jogo é um embate entre dois jogadores, sem times. Cada jogador inicia a rodad
 - Depois da jogada, deve ser verificada a soma das pontas externas do tabuleiro.
 - Quando a soma das pontas externas for múltiplo de 5, o jogador que realizou a jogada pontua.
 - A pontuação da jogada deve ser calculada por `somaDasPontas / 5`.
+- Uma dupla na extremidade contribui com as duas faces para a soma das pontas. Se a dupla for a única pedra, suas duas faces são contadas uma única vez. O valor livre para encaixe continua sendo o da face externa.
+- Uma dupla na extremidade contribui com as duas faces para a soma das pontas. Se a dupla for a única pedra, suas duas faces são contadas uma única vez. O valor livre para encaixe continua sendo o da face externa.
 - Se o jogador não tiver peça compatível, deve comprar uma peça da cava, quando ela existir; se ainda não puder jogar, passa a vez.
 
 ## O que deve ser implementado pelos alunos

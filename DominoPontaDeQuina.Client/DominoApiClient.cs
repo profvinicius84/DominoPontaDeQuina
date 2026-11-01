@@ -77,7 +77,7 @@ public sealed class DominoApiClient(HttpClient http)
     public Task<ConfirmacaoAcao> AcaoAsync(string token, Guid partidaId, string acao, long versaoEsperada,
         Guid chaveIdempotencia, CancellationToken ct = default)
     {
-        if (acao is not ("entrar" or "iniciar" or "passar" or "comprar"))
+        if (acao is not ("entrar" or "iniciar" or "passar" or "comprar" or "cancelar"))
             throw new ArgumentException("Ação desconhecida.", nameof(acao));
         return EnviarAsync<ConfirmacaoAcao>(HttpMethod.Post, $"api/partidas/{partidaId}/{acao}", token,
             acao == "entrar" && webhook is not null

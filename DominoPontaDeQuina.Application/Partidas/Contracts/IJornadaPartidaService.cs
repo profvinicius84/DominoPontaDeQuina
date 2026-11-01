@@ -47,6 +47,11 @@ public interface IJornadaPartidaService
         PassarVezPartidaComando comando,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Cancela uma partida aberta sem conceder vitória ou pontos.</summary>
+    Task<ResultadoPartida<ConfirmacaoAcaoPartida>> CancelarAsync(
+        CancelarPartidaComando comando,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Consulta resultado e histórico filtrados pela participação.</summary>
     Task<ResultadoPartida<ResultadoHistoricoPartida>> ConsultarResultadoHistoricoAsync(
         ConsultarResultadoHistoricoConsulta consulta,

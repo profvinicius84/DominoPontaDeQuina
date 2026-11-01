@@ -51,5 +51,6 @@ public enum SituacaoRodadaPartida
 public enum MotivoEncerramentoRodada
 {
     MaoVazia,
-    TabuleiroTravado
+    TabuleiroTravado,
+    CancelamentoPartida
 }

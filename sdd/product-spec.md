@@ -1,5 +1,9 @@
 # Especificação de produto — Dominó Ponta de Quina
 
+## Atualização de solicitação de token — 2026-10-18
+
+E-mails malformados ou fora de `@fiap.com.br` recebem `400` com o booleano JSON `false`. Um endereço FIAP válido recebe `202` sem corpo, independentemente de a conta já existir; se necessário, a conta é criada. A operação aceita no máximo cinco solicitações por e-mail normalizado e 50 por IP de origem em janelas de dez minutos e devolve `429` no excedente. Os limites são mantidos em memória por instância da API. Essa regra substitui a confirmação uniforme anterior para endereços fora do domínio, sem revelar a existência de contas.
+
 ## Atualização de fluxo — 2026-09-24
 
 O cliente acompanha a partida consultando periodicamente o estado privado por versão. `GET /api/partidas/{partidaId}/atualizacoes` exige o token, o perfil e sua chave de ativação; retorna `204` quando a versão conhecida permanece atual e `200` com o estado quando houve mudança. A resposta de cada ação já contém o estado confirmado. Criar e ingressar não exigem URL de webhook, receptor, relay nem segredo compartilhado. O cliente MAUI consulta a cada dois segundos enquanto a partida está aberta e aplica somente versões não anteriores à atual. Esta decisão substitui as exigências de webhook e correlação de callback descritas abaixo; o suporte anterior permanece apenas para compatibilidade.
@@ -113,6 +117,10 @@ O README do Core descreve um exercício de preenchimento de lacunas. Esse exerc�
 | RG-05 | Os turnos seguem a ordem definida para os dois jogadores. | README do Core, adaptado ao embate individual. |
 | RG-06 | A peça deve encaixar na ponta escolhida. | README do Core. |
 | RG-07 | Soma das pontas externas múltipla de cinco gera `soma / 5` pontos para o jogador que realizou a jogada. | Decisão do responsável; regra de múltiplos de cinco preservada. |
+
+Detalhamento de RG-07: uma dupla em qualquer extremidade soma suas duas faces. Uma dupla única no tabuleiro é contada uma vez (suas duas faces), sem duplicar a pedra. Exemplo: ponta simples `3` e dupla `6/6` exposta somam `15` e concedem `3` pontos. O valor livre para validar encaixes continua sendo `6`.
+
+Um participante ativo pode cancelar a partida antes do início ou durante o jogo. A API encerra sem vencedor, preserva placar e histórico e libera os participantes para outra partida. A operação exige versão e chave de idempotência, é irreversível e não reabre uma rodada ou partida. Reiniciar equivale a cancelar e criar outra partida.
 | RG-08 | Sem jogada válida, o jogador compra exatamente uma peça da cava quando ela existir; se a peça comprada não permitir jogada, ou se a cava estiver vazia, passa a vez. | Decisão do responsável em 2026-09-21. |
 | RG-09 | A rodada termina quando um jogador fica com a mão vazia ou quando o tabuleiro trava. No travamento, o valor das pedras na mão de um jogador gera pontos para o adversário somente quando for múltiplo de cinco; a rodada seguinte reinicia pelo critério da maior dupla. | Decisão do responsável em 2026-09-21. |
 | RG-10 | Novas rodadas continuam até um jogador alcançar ou ultrapassar a pontuação alvo definida para a partida. | README do Core. |
@@ -126,7 +134,7 @@ São requisitos do produto, não evidência de implementação. A API entregue d
 1. O aluno envia seu e-mail FIAP à operação pública específica de solicitação de token.
 2. A API cria a conta se o e-mail elegível ainda não existir.
 3. A API valida a requisição e aplica limites de abuso sem revelar se o e-mail existe.
-4. Para qualquer solicitação processável, a API devolve uma confirmação genérica uniforme, sem token no corpo.
+4. Para e-mail FIAP válido, a API devolve uma confirmação uniforme, sem token no corpo. E-mail malformado ou fora do domínio recebe `400` com `false`.
 5. Para e-mail FIAP elegível, a plataforma emite um token reutilizável até revogação e o envia exclusivamente ao endereço solicitado. E-mail fora do domínio não recebe token.
 6. O corpo da resposta HTTP, a URL e os logs não contêm o token.
 7. O aluno reutiliza o token recebido nas operações protegidas e em novos acessos, inclusive em dois clientes, até sua revogação. Não precisa solicitar novo token a cada acesso.
@@ -191,7 +199,7 @@ Esta tabela fixa a capacidade funcional mínima sem definir nomes de rotas, cód
 
 | Operação | Entrada funcional mínima | Saída funcional mínima | Erros e autorização mínimos |
 | --- | --- | --- | --- |
-| Solicitar token | E-mail do aluno em formato válido. | Confirmação genérica uniforme, sem token; conta FIAP criada se ausente. | Formato inválido e limitação de abuso. E-mail FIAP elegível recebe token por e-mail; endereço fora do domínio não recebe token. |
+| Solicitar token | E-mail do aluno em formato válido. | `202` sem token para e-mail FIAP válido; conta criada se ausente. | E-mail malformado ou fora do domínio recebe `400` com `false`; excesso por origem recebe `429`. |
 | Ativar jogador-perfil | Identidade autenticada e identificação de jogador pertencente à conta. | Vínculo exclusivo do jogador ao cliente, conforme contrato técnico. | Jogador de outra conta ou já ativo em cliente incompatível; liberação e revinculação seguem a política aprovada. |
 | Criar partida | Identidade autenticada, jogador-perfil ativo e dados configuráveis aprovados para a partida. | Identificador, estado inicial e participação criada pela API para o jogador. | Token inválido; jogador inativo/incompatível; entrada inválida; criação não permitida. A política final de ativação e criação deve constar no contrato técnico. |
 | Ingressar na partida | Identidade autenticada, identificação da partida, `jogadorId`, versão e chave de ingresso. | Participação criada pela API e estado permitido ao jogador. | Jogador sem vínculo/ativação, partida indisponível, lotada, encerrada ou ingresso não autorizado; repetição tratada de forma definida. |
@@ -245,7 +253,7 @@ Todos os critérios abaixo exigem evidência de implementação e validação. S
 | ID | Cenário e resultado observável |
 | --- | --- |
 | AC-ID-01 | Dado um e-mail FIAP elegível, cadastrado ou não, a solicitação cria a conta se ausente, não devolve token na resposta e entrega o token válido exclusivamente ao endereço solicitado. |
-| AC-ID-02 | Solicitações processáveis para e-mail FIAP e para endereço fora do domínio produzem confirmação pública uniforme; endereço fora do domínio não recebe token. |
+| AC-ID-02 | E-mail malformado ou fora de `@fiap.com.br` recebe `400` com JSON `false` e não recebe token. Endereços FIAP válidos recebem `202` sem token no corpo, independentemente de cadastro prévio. |
 | AC-ID-03 | Token ausente, inválido ou revogado não autoriza operação protegida; token revogado não volta a ser aceito. O mesmo token válido autoriza acessos repetidos, inclusive após reabrir o cliente e em dois clientes simultâneos, sem nova emissão e sem expiração automática; após revogação, ambos perdem acesso. |
 | AC-ID-04 | Tentativas excessivas de solicitação são limitadas e deixam evidência operacional sem registrar token ou permitir enumeração de e-mails. |
 | AC-ID-05 | Varredura de respostas, URLs, logs e telemetria de cenários de emissão e uso não encontra tokens expostos. |

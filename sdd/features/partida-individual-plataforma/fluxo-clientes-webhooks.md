@@ -40,7 +40,7 @@ A inspeção anterior foi superada pela implementação das T-33 a T-39: perfis,
 
 | Local | Comportamento observado | Adequação necessária |
 | --- | --- | --- |
-| `DominoPontaDeQuina.Api/Program.cs` e `EndpointsJogadores.cs` | Expõem perfis, ativação/liberação, lista, criação, ingresso e ações com Bearer e prova de ativação. | T-40 documenta o callback e publica a autenticação final. |
+| `DominoPontaDeQuina.Api/Controllers/` | Expõem perfis, ativação/liberação, lista, criação, ingresso e ações com Bearer e prova de ativação. `Program.cs` configura os serviços e mapeia os controllers. | T-40 documenta o callback e publica a autenticação final. |
 | `DominoPontaDeQuina.Application/Partidas/JornadaPartidaService.cs` | Autoriza por jogador ativo, bloqueia participação incompatível e grava projeções privadas na outbox junto da transição. | Sem lacuna para T-33 a T-39. |
 | `DominoPontaDeQuina.Application/Partidas/Contracts/**` | Recebem jogador/webhook sem participação do cliente e expõem próxima ação, participação e envelope versionado. | Sem lacuna para T-33 a T-39. |
 | `DominoPontaDeQuina.Api/Webhooks/**` | Entrega assinada com repetição, retenção e defesa de destino. | T-41 implementa deduplicação e ordenação no cliente oficial. |

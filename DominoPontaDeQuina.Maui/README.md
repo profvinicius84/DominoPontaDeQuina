@@ -14,15 +14,17 @@ dotnet run --project DominoPontaDeQuina.Maui
 Na interface, o login, a escolha do jogador e a partida aparecem em três telas sequenciais. Durante
 a partida, a tela destaca a mesa verde, o placar, o turno e as pedras da sua mão:
 
-1. Na tela de login, informe o e-mail autorizado para solicitar um token ou entre com um token existente. O endereço da API fica em **Configurar servidor**; HTTPS é obrigatório fora de localhost.
+1. Na tela de login, informe o e-mail autorizado para solicitar um token ou entre com um token existente. O endereço inicial é o App Service `domino-quina-api-b1-pf2261.azurewebsites.net`; ele pode ser alterado em **Configurar servidor**. HTTPS é obrigatório fora de localhost.
 2. Após um login válido, escolha um jogador na segunda tela. **Criar novo jogador** abre o campo de cadastro quando necessário.
 3. Na terceira tela, crie uma partida ou escolha uma partida disponível. Depois de entrar, a tela mostra apenas a espera e o início da partida. No segundo cliente, use outro perfil (podendo compartilhar a conta/token).
 4. Inicie a partida. Cada cliente recebe somente a própria mão e a próxima ação. A pedra obrigatória de abertura aparece destacada para quem abre a rodada.
 5. Toque em uma pedra da mão e escolha **Jogar na esquerda** ou **Jogar na direita**. Sem encaixe, use **Comprar pedra**; o servidor compra uma
    pedra e decide se mantém o turno ou passa. Todas as decisões são da API.
 6. O cliente aplica a resposta de cada ação e consulta atualizações a cada dois segundos enquanto a partida está aberta. **Atualizar partida** permite uma consulta manual. Consulte resultado e jogadas ao terminar.
+7. **Cancelar partida** está disponível antes do início e durante o jogo. Após a confirmação, a API encerra a partida sem vencedor, preserva o placar e libera os jogadores. Use **Voltar à sala** e **Criar partida** para começar outra.
 
 O endereço da última API e o token são recuperados ao abrir o aplicativo. Se o token salvo ainda for válido, o login é pulado e o aplicativo abre na escolha do jogador. Um token inválido leva de volta à tela de login.
+Ao selecionar e ativar o jogador, o aplicativo também consulta a última partida desse perfil e retoma o estado atual, inclusive após fechar e reabrir a janela. O identificador da partida é salvo por endereço da API, conta e jogador. Se a preferência local não existir, **Tenho um código de partida → Retomar minha partida pelo código** consulta a participação existente. **Voltar à sala** depois do encerramento limpa somente a lembrança local da partida.
 
 O cliente não referencia Core, Application, Infrastructure ou banco. Usa o mesmo
 `DominoPontaDeQuina.Client` HTTP do painel, com DTOs próprios. Nenhuma regra é

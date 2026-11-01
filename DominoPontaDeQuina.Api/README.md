@@ -14,7 +14,7 @@ As propriedades JSON usam `camelCase`. `lado` é numérico: `0` para esquerda e 
 
 `POST /api/identidade/token` recebe somente `{ "email": "aluno@fiap.com.br" }`.
 
-Esta é a única rota pública de emissão de token. Um e-mail `@fiap.com.br` ainda ausente é cadastrado na primeira solicitação, e o token é enviado a esse endereço. A resposta é `202 Accepted` com corpo vazio, inclusive para endereços fora do domínio, que não recebem token. O token nunca aparece na resposta, URL, log ou telemetria da API. Há limite de cinco solicitações por origem a cada dez minutos; o excedente recebe `429 Too Many Requests`.
+Esta é a única rota pública de emissão de token. Um e-mail válido `@fiap.com.br` ainda ausente é cadastrado na primeira solicitação, e o token é enviado a esse endereço. Endereços malformados ou fora do domínio recebem `400 Bad Request` com o booleano JSON `false`. Endereços FIAP válidos recebem `202 Accepted` com corpo vazio, sem revelar se a conta já existia. O token nunca aparece na resposta, URL, log ou telemetria da API. Há limites independentes de cinco solicitações por e-mail normalizado e 50 por IP de origem em dez minutos; o excedente recebe `429 Too Many Requests`. Os limites são mantidos em memória por instância da API.
 
 O endereço do remetente SendGrid não é um destinatário; para receber o token, informe o e-mail FIAP desejado no corpo da solicitação.
 
@@ -53,6 +53,7 @@ O ingresso informa ID da partida na rota e `jogadorId` no corpo, além de versã
 | Jogar | `POST /api/partidas/{id}/jogar` | ação + `valorA`, `valorB`, `lado` |
 | Comprar | `POST /api/partidas/{id}/comprar` | ação |
 | Passar | `POST /api/partidas/{id}/passar` | ação |
+| Cancelar | `POST /api/partidas/{id}/cancelar` | ação |
 | Resultado e histórico | `GET /api/partidas/{id}/resultado?jogadorId={perfil}` | — |
 
 Corpo de ação: `{ "jogadorId": "<perfil>", "versaoEsperada": 2, "chaveIdempotencia": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }`. Inclua o cabeçalho `X-Jogador-Ativacao` nas operações de jogador.
@@ -63,7 +64,28 @@ Em `jogar`, acrescente `valorA`, `valorB` e `lado` ao corpo de ação. A listage
 
 As respostas de sucesso de ação são `{ "chaveIdempotencia", "acaoIdempotente", "estado" }`. Repetir exatamente a mesma intenção devolve o estado anterior com `acaoIdempotente: true`, sem duplicar pontos, turno ou jogada.
 
+Em `GET /resultado`, cada item de `eventos` conserva `pecaJogada`, `lado` e `passouVez` no JSON. Para uma jogada, pedra e lado têm valor e `passouVez` é `false`. Para uma passagem explícita, pedra e lado são `null` e `passouVez` é `true`. Para uma compra, pedra e lado são `null` e `passouVez` é `false`, inclusive quando a compra causa passagem automática; consulte o estado para identificar o turno resultante. `pontosConcedidos` representa pontos da jogada, não a transferência de pontos por travamento no fim da rodada. O cancelamento não concede pontos.
+
 O estado de participante contém `participacaoId`, `minhaMao`, tabuleiro orientado, participantes com contagem de pedras, turno, pontuação, versão, vencedor e `proximaAcao`: `aguardar`, `jogarAbertura`, `jogar`, `comprar`, `passar` ou `encerrada`. Somente `jogarAbertura` inclui `pedraAberturaObrigatoria`; enviar outra pedra é rejeitado sem mutação. A rota de observação não contém `minhaMao`, a pedra obrigatória nem qualquer mão privada.
+
+`tabuleiro` é uma lista espacial **da esquerda para a direita**, com cada pedra já orientada. Quando há pedras, a ponta livre esquerda é `tabuleiro[0].valorA` e a direita é `tabuleiro[tabuleiro.length - 1].valorB`. A lista vazia não possui pontas. Por exemplo, `[{"valorA":3,"valorB":5},{"valorA":5,"valorB":6},{"valorA":6,"valorB":6}]` tem encaixes livres em `3` e `6`. Para **pontuar**, a dupla exposta `6/6` contribui com as duas faces: nesse exemplo, `3 + 6 + 6 = 15`, ou 3 pontos para quem fez a jogada. O servidor valida o encaixe e concede os pontos; o cliente usa as pontas para escolher `lado`.
+
+Exemplo de trecho do formato de resposta após três pedras, mostrando a orientação publicada pela API:
+
+```json
+{
+  "tabuleiro": [
+    { "valorA": 3, "valorB": 5 },
+    { "valorA": 5, "valorB": 6 },
+    { "valorA": 6, "valorB": 6 }
+  ],
+  "proximaAcao": 2
+}
+```
+
+O trecho ilustra os campos relevantes; a resposta completa inclui também versão, participantes, mão própria e situação. `proximaAcao` depende do jogador que consulta.
+
+Qualquer participante com perfil ativo pode cancelar uma partida aguardando início ou em andamento. O cancelamento encerra a partida sem vencedor (`vencedorId: null`), preserva placar, pedras e histórico e libera ambos os jogadores para criar ou ingressar em outra partida. Envie versão e chave de idempotência como nas demais ações. Repetir a mesma intenção não cancela duas vezes; uma nova tentativa após encerramento recebe `ESTADO_INVALIDO`. Para começar novamente, crie outra partida. O cancelamento aparece no estado e no evento `partida-cancelada` para clientes de webhook; a lista `eventos` do resultado continua restrita a jogadas, compras e passagens.
 
 ## Consulta de atualizações
 
@@ -73,7 +95,7 @@ As respostas de atualização exigem a posse do perfil ativo e não revelam a m�
 
 ## Compatibilidade com clientes de webhook anteriores
 
-No HTTP, `proximaAcao` usa números de 0 a 5: aguardar, jogar abertura, jogar, comprar, passar e encerrada. No callback, os enums são strings conforme o esquema de callback no OpenAPI. O cliente compartilhado aceita as duas representações.
+No HTTP, `proximaAcao` usa `0 = aguardar`, `1 = jogarAbertura`, `2 = jogar`, `3 = comprar`, `4 = passar`, `5 = encerrada`. No callback, os mesmos nomes são strings conforme o esquema de callback no OpenAPI. O cliente compartilhado aceita as duas representações.
 
 Cada transição aceita grava um evento privado na mesma transação e o entrega depois do commit. O comando HTTP confirma a operação; falha do callback não desfaz ingresso, início, jogada, compra ou passagem. Rejeições sem mudança de versão não geram evento.
 
@@ -86,6 +108,8 @@ O worker usa timeout padrão de cinco segundos, redirecionamentos desabilitados 
 ## Erros estáveis
 
 Erros de domínio retornam `{ "codigo": "...", "estadoAutoritativo": { ... } }` quando o chamador pode receber uma visão atual da própria partida.
+
+Respostas `400` possuem três formatos existentes: uma entrada de domínio inválida retorna, por exemplo, `{"codigo":"ENTRADA_INVALIDA","estadoAutoritativo":null}`; uma falha de desserialização ou modelo pode retornar `400` com corpo vazio; e um e-mail inválido em `POST /api/identidade/token` retorna o booleano JSON `false`. O cliente deve verificar status e tipo do corpo antes de ler `codigo`. Esses formatos são mantidos por compatibilidade.
 
 | HTTP | `codigo` | Significado e reação do cliente |
 | --- | --- | --- |

@@ -34,7 +34,7 @@ A API indica a pedra obrigatória de abertura, turno e próxima ação. Cada rod
 ## Arquitetura
 
 Core executa regras; Domain define entidades persistentes; Application coordena os casos de uso;
-Infrastructure implementa persistência e e-mail. Api publica HTTP e entrega a outbox de webhooks.
+Infrastructure implementa persistência e e-mail. Api organiza as rotas HTTP em controllers e entrega a outbox de webhooks.
 Client contém transporte e sincronização, consumidos pelo Blazor e MAUI sem acesso ao banco ou motor.
 Migrations mantém o esquema; Tests cobre as camadas e contratos.
 O projeto histórico Repository fica fora da solução principal e não é a persistência da API.

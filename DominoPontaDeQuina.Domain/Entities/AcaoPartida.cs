@@ -68,7 +68,8 @@ public enum TipoAcaoPartida
     Jogada,
     Passagem,
     EncerramentoRodada,
-    EncerramentoPartida
+    EncerramentoPartida,
+    CancelamentoPartida
 }
 
 /// <summary>Indica a ponta do tabuleiro registrada pela ação, sem decisão de interface.</summary>

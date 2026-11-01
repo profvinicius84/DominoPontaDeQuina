@@ -35,7 +35,8 @@ public sealed class ApiHttpIntegrationTests : IClassFixture<ApiHttpIntegrationTe
         Assert.Equal("bearer", components.GetProperty("securitySchemes").GetProperty("Bearer").GetProperty("scheme").GetString());
         var operations = root.GetProperty("paths").EnumerateObject()
             .SelectMany(path => path.Value.EnumerateObject().Select(operation => (Path: path.Name, Operation: operation.Value))).ToArray();
-        Assert.Equal(18, operations.Length);
+        Assert.Equal(19, operations.Length);
+        Assert.True(root.GetProperty("paths").TryGetProperty("/api/partidas/{partidaId}/cancelar", out _));
         Assert.False(root.GetProperty("paths").TryGetProperty("/api/identidade/login", out _));
         foreach (var (atual, anterior) in new[]
         {
@@ -59,6 +60,8 @@ public sealed class ApiHttpIntegrationTests : IClassFixture<ApiHttpIntegrationTe
                 Assert.False(operation.TryGetProperty("security", out var security) && security.GetArrayLength() > 0);
                 Assert.True(responses.TryGetProperty("202", out _));
                 Assert.True(responses.TryGetProperty("429", out _));
+                Assert.Equal("boolean", responses.GetProperty("400").GetProperty("content")
+                    .GetProperty("application/json").GetProperty("schema").GetProperty("type").GetString());
             }
             else
             {
@@ -83,6 +86,14 @@ public sealed class ApiHttpIntegrationTests : IClassFixture<ApiHttpIntegrationTe
         }
         var schemas = components.GetProperty("schemas");
         Assert.False(schemas.GetProperty("EstadoPartidaObservador").GetProperty("properties").TryGetProperty("minhaMao", out _));
+        Assert.Contains("0 = aguardar", schemas.GetProperty("ProximaAcaoPartida")
+            .GetProperty("description").GetString());
+        Assert.Contains("esquerda para a direita", schemas.GetProperty("EstadoPartidaParticipante")
+            .GetProperty("properties").GetProperty("tabuleiro").GetProperty("description").GetString());
+        Assert.Contains("64 caracteres hexadecimais", schemas.GetProperty("AtivarJogadorRequest")
+            .GetProperty("properties").GetProperty("chaveAtivacao").GetProperty("description").GetString());
+        Assert.Contains("pecaJogada e lado null", schemas.GetProperty("EventoHistoricoPartida")
+            .GetProperty("description").GetString());
         Assert.Equal(0, schemas.GetProperty("JogarRequest").GetProperty("example").GetProperty("lado").GetInt32());
         Assert.Equal(50, schemas.GetProperty("CriarPartidaRequest").GetProperty("example").GetProperty("pontuacaoAlvo").GetInt32());
         Assert.False(schemas.GetProperty("SolicitarTokenRequest").GetProperty("properties").TryGetProperty("senha", out _));
@@ -123,6 +134,10 @@ public sealed class ApiHttpIntegrationTests : IClassFixture<ApiHttpIntegrationTe
         Assert.Equal(string.Empty, await semMudanca.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(
             $"/api/partidas/{criada.PartidaId}/atualizacoes?jogadorId={jogadorA}&versaoConhecida=-1")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(
+            $"/api/partidas/{criada.PartidaId}/atualizacoes?jogadorId={jogadorA}&versaoConhecida=invalida")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(
+            $"/api/partidas/{criada.PartidaId}/atualizacoes?versaoConhecida={criada.VersaoEstado}")).StatusCode);
 
         await AtivarPerfilAsync(client, tokenB);
         var jogadorB = Guid.Parse(client.DefaultRequestHeaders.GetValues("X-Jogador-Id").Single());
@@ -206,7 +221,7 @@ public sealed class ApiHttpIntegrationTests : IClassFixture<ApiHttpIntegrationTe
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/identidade/sessao")).StatusCode);
 
         client.DefaultRequestHeaders.Authorization = null;
-        for (var tentativa = 0; tentativa < 3; tentativa++)
+        for (var tentativa = 0; tentativa < 5; tentativa++)
             Assert.Equal(HttpStatusCode.Accepted, (await client.PostAsJsonAsync("/api/identidade/token", new { email = "invalido@fiap.com.br", senha = SenhaAcademica })).StatusCode);
         Assert.Equal((HttpStatusCode)429, (await client.PostAsJsonAsync("/api/identidade/token", new { email = "invalido@fiap.com.br", senha = SenhaAcademica })).StatusCode);
     }
@@ -256,6 +271,34 @@ public sealed class ApiHttpIntegrationTests : IClassFixture<ApiHttpIntegrationTe
         Assert.Equal(HttpStatusCode.Unauthorized, (await reaberto.GetAsync("/api/identidade/sessao")).StatusCode);
         reaberto.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", novoToken);
         Assert.Equal(HttpStatusCode.OK, (await reaberto.GetAsync("/api/identidade/sessao")).StatusCode);
+    }
+
+    [Fact(DisplayName = "HTTP cancela partida aberta e permite criar outra com o mesmo perfil")]
+    public async Task CancelarPartida_PreservaContratoHttp()
+    {
+        using var host = new DominoApiFactory();
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            var identidade = scope.ServiceProvider.GetRequiredService<IIdentidadeAcessoService>();
+            Assert.True((await identidade.CadastrarUsuarioAutorizadoAsync("cancelamento@fiap.com.br")).Sucesso);
+        }
+        using var client = host.CreateClient();
+        Assert.Equal(HttpStatusCode.Accepted,
+            (await client.PostAsJsonAsync("/api/identidade/token", new { email = "cancelamento@fiap.com.br" })).StatusCode);
+        await AtivarPerfilAsync(client, host.Entrega.ObterToken("cancelamento@fiap.com.br"));
+        var criada = await PostarAsync<EstadoPartidaParticipante>(client, "/api/partidas", new { pontuacaoAlvo = 100 });
+        var chave = Guid.NewGuid();
+        var rota = $"/api/partidas/{criada.PartidaId}/cancelar";
+        var cancelada = await PostarAsync<ConfirmacaoAcaoPartida>(client, rota,
+            new { versaoEsperada = criada.VersaoEstado, chaveIdempotencia = chave });
+        Assert.Equal(SituacaoPartida.Encerrada, cancelada.Estado.Situacao);
+        Assert.Null(cancelada.Estado.VencedorId);
+        Assert.Equal(criada.VersaoEstado + 1, cancelada.Estado.VersaoEstado);
+        var repetida = await PostarAsync<ConfirmacaoAcaoPartida>(client, rota,
+            new { versaoEsperada = criada.VersaoEstado, chaveIdempotencia = chave });
+        Assert.True(repetida.AcaoIdempotente);
+        var outra = await PostarAsync<EstadoPartidaParticipante>(client, "/api/partidas", new { pontuacaoAlvo = 100 });
+        Assert.NotEqual(criada.PartidaId, outra.PartidaId);
     }
 
     private static async Task AtivarPerfilAsync(HttpClient client, string token)

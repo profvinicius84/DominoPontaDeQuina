@@ -2,12 +2,63 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using DominoPontaDeQuina.Client;
+using DominoPontaDeQuina.Application.Identidade.Contracts;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace DominoPontaDeQuina.Tests;
 
 public class ClientTests
 {
+    [Fact]
+    public async Task DoisClientesCompartilhamTokenERecebemTurnoPorConsulta()
+    {
+        using var host = new ApiHttpIntegrationTests.DominoApiFactory();
+        using (var scope = host.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<IIdentidadeAcessoService>()
+                .CadastrarUsuarioAutorizadoAsync("cliente-polling@fiap.com.br");
+        using var httpA = host.CreateClient();
+        using var httpB = host.CreateClient();
+        var a = new DominoApiClient(httpA);
+        var b = new DominoApiClient(httpB);
+        await a.SolicitarTokenAsync("cliente-polling@fiap.com.br");
+        var token = host.Entrega.ObterToken("cliente-polling@fiap.com.br");
+        var perfilA = Assert.Single(await a.ListarJogadoresAsync(token));
+        var perfilB = await b.CriarJogadorAsync(token, "Segundo jogador");
+        foreach (var (cliente, perfil) in new[] { (a, perfilA), (b, perfilB) })
+        {
+            var chave = DominoApiClient.GerarChaveAtivacao();
+            await cliente.AtivarJogadorAsync(token, perfil.JogadorId, chave);
+            cliente.SelecionarJogador(perfil.JogadorId, chave);
+        }
+
+        var criada = await a.CriarAsync(token, 1);
+        Assert.Contains(await b.ListarPartidasAsync(token), p => p.PartidaId == criada.PartidaId);
+        var ingresso = await b.AcaoAsync(token, criada.PartidaId, "entrar", criada.VersaoEstado, Guid.NewGuid());
+        var vistaA = await a.AtualizacoesAsync(token, criada.PartidaId, criada.VersaoEstado);
+        Assert.Equal(ingresso.Estado.VersaoEstado, vistaA!.VersaoEstado);
+        Assert.Null(await b.AtualizacoesAsync(token, criada.PartidaId, ingresso.Estado.VersaoEstado));
+
+        var inicio = await a.AcaoAsync(token, criada.PartidaId, "iniciar", ingresso.Estado.VersaoEstado, Guid.NewGuid());
+        var vistaB = await b.AtualizacoesAsync(token, criada.PartidaId, ingresso.Estado.VersaoEstado);
+        Assert.Equal(inicio.Estado.VersaoEstado, vistaB!.VersaoEstado);
+        Assert.Equal(7, inicio.Estado.MinhaMao.Count);
+        Assert.Equal(7, vistaB.MinhaMao.Count);
+        Assert.Empty(inicio.Estado.MinhaMao.Intersect(vistaB.MinhaMao));
+        Assert.Single(new[] { inicio.Estado, vistaB }, e => e.PedraAberturaObrigatoria is not null);
+
+        var daVez = inicio.Estado.JogadorDoTurnoId == perfilA.JogadorId ? a : b;
+        var estadoDaVez = daVez == a ? inicio.Estado : vistaB;
+        var abertura = estadoDaVez.PedraAberturaObrigatoria!;
+        var jogada = await daVez.JogarAsync(token, criada.PartidaId, abertura, LadoJogavel.Esquerda,
+            estadoDaVez.VersaoEstado, Guid.NewGuid());
+        Assert.Single(jogada.Estado.Tabuleiro);
+        var outro = daVez == a ? b : a;
+        var atualizacao = await outro.AtualizacoesAsync(token, criada.PartidaId, estadoDaVez.VersaoEstado);
+        Assert.Equal(jogada.Estado.VersaoEstado, atualizacao!.VersaoEstado);
+        Assert.Single(atualizacao.Tabuleiro);
+    }
+
     [Fact]
     public async Task FluxoPorConsultaAplicaRespostaDaAcaoSemEsperarCallback()
     {
